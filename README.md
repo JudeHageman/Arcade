@@ -1,1 +1,2 @@
-# Arcade
+# Resonance
+This will be an arcade where players can login and play different games with some competitive scoring. Are arcade is unique in that there is a faction feature where players join a set amount of factions. There are two leaderboards, a faction ranking leaderboard and an individual leaderboard. The faction ranking leaderboard is based on how well factions complete a specific amount of challenges and the individual leaderboard is based on how well an individual scores across the games. Additionally, the factions get unique colors in each game for their character. There is also a faction chat which is in the python client, different from the live chat in each game.
