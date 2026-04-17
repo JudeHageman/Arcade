@@ -90,10 +90,10 @@ def open_game():
         window.update()
     
         # build path to the game
-        game_path = os.path.join(os.path.dirname(__file__), "game_client", "game", "main.py")
-        game_dir = os.path.dirname(game_path)
+        game_path = os.path.join(os.path.dirname(__file__), "games", "game_1", "game", "main.py")
+        game_dir = os.path.join(os.path.dirname(__file__), "games", "game_1", "game")
         
-        # start the game as a separate process
+        # start the game as a separate process from the game directory
         game_instance = subprocess.Popen([sys.executable, game_path, "Player1"], cwd=game_dir)
         
         # update the game button
