@@ -6,6 +6,7 @@ import subprocess
 
 import sys
 import os
+from pathlib import Path
 
 # used for the async server checks
 import asyncio
@@ -89,12 +90,13 @@ def open_game():
     try:
         window.update()
     
-        # build path to the game
-        game_path = os.path.join(os.path.dirname(__file__), "games", "game_1", "game", "main.py")
-        game_dir = os.path.join(os.path.dirname(__file__), "games", "game_1", "game")
+        # build path to the game using pathlib for reliable path handling
+        client_dir = Path(__file__).parent
+        game_dir = client_dir.parent / "games" / "game_1" / "game"
+        game_path = game_dir / "main.py"
         
         # start the game as a separate process from the game directory
-        game_instance = subprocess.Popen([sys.executable, game_path, "Player1"], cwd=game_dir)
+        game_instance = subprocess.Popen([sys.executable, str(game_path), "Player1"], cwd=str(game_dir))
         
         # update the game button
         game_button.config(text="Close Game", command=close_game)
