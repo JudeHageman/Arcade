@@ -26,8 +26,8 @@ import json
 server_port = 8000
 server_url = f"ws://127.0.0.1:{server_port}"
 
-# allow custom player name via command line argument, default to "Player1"
-player_name = sys.argv[1] if len(sys.argv) > 1 else "Player1"
+# player name is assigned by the server after login
+player_name = "N/A"
 
 # print connection info
 print(f"Connecting to server: {server_url}")
@@ -37,11 +37,55 @@ print(f"Player name: {player_name}")
 ws = None
 ws_connection = False
 ws_loop = None
+authenticated = False
 games_data = {}
 loaded_games = {}
 game_instance = None
 game_buttons = {}
+username_entry = None
+password_entry = None
 chat_widgets = {}
+login_widget = None
+main_widget = None
+games_widget = None
+pending_username = ""
+
+def change_view(view):
+    """Switch the client between disconnected, login, and games views."""
+    global player_name, authenticated
+
+    if view == "disconnected":
+        authenticated = False
+        player_name = "N/A"
+        if 'player_label' in globals():
+            player_label.config(text="Player: N/A")
+        window.title("Resonance - N/A")
+        if login_widget:
+            login_widget.pack_forget()
+        if main_widget:
+            main_widget.pack_forget()
+        return
+
+    if view == "login":
+        if main_widget:
+            main_widget.pack_forget()
+        if login_widget:
+            login_widget.pack(pady=10)
+
+        if username_entry:
+            username_entry.config(state=tk.NORMAL)
+        if password_entry:
+            password_entry.config(state=tk.NORMAL)
+            password_entry.delete(0, tk.END)
+        if login_button:
+            login_button.config(state=tk.NORMAL)
+        return
+
+    if view == "games":
+        if login_widget:
+            login_widget.pack_forget()
+        if main_widget:
+            main_widget.pack(fill=tk.BOTH, expand=True)
 
 def clear_game_state():
     """Clear all game and chat state from the client UI and memory."""
@@ -52,8 +96,46 @@ def clear_game_state():
     game_buttons.clear()
     chat_widgets.clear()
 
-    for widget in games_frame.winfo_children():
+    for widget in games_widget.winfo_children():
         widget.destroy()
+
+def change_username(username):
+    """Update the displayed username after a successful login."""
+    global player_name, authenticated
+
+    authenticated = True
+    player_name = username
+    player_label.config(text=f"Player: {player_name}")
+    window.title(f"Resonance - {player_name}")
+
+    if username_entry:
+        username_entry.config(state=tk.DISABLED)
+    if password_entry:
+        password_entry.delete(0, tk.END)
+        password_entry.config(state=tk.DISABLED)
+    if login_button:
+        login_button.config(state=tk.DISABLED)
+    change_view("games")
+
+def send_login():
+    """Send the username and password to the server for authentication."""
+    global ws, ws_loop, pending_username
+
+    if not ws_connection or not ws or not ws_loop:
+        return
+
+    username = username_entry.get().strip() if username_entry else ""
+    password = password_entry.get() if password_entry else ""
+
+    if not username or not password:
+        return
+    pending_username = username
+    payload = json.dumps({
+        "type": "login",
+        "username": username,
+        "password": password
+    })
+    asyncio.run_coroutine_threadsafe(ws.send(payload), ws_loop)
 
 def print_received_games_state():
     """Print the current games data received from the server."""
@@ -71,22 +153,30 @@ def print_received_games_state():
 
 async def persistent_connection():
     """Maintain a persistent connection to the server, automatically reconnecting if the connection is lost."""
-    global ws_connection, ws, ws_loop, games_data
+    global ws_connection, ws, ws_loop, games_data, authenticated
     
     try:
         async with websockets.connect(server_url) as ws_conn:
             ws = ws_conn
             ws_loop = asyncio.get_running_loop()
             ws_connection = True
+            authenticated = False
             window.after(0, update_connection_status)  
+            window.after(0, lambda: change_view("login"))
             print("\n[STATUS] Server connected")
             
             # listen for messages from the server
             async for payload in ws_conn:
                 try:
                     data = json.loads(payload)
+
+                    if data.get("type") == "login_success":
+                        window.after(0, lambda username=pending_username: change_username(username))
+                        continue
                     
                     if data.get("type") == "games_library" or "games" in data:
+                        if not authenticated:
+                            continue
                         games_data = data.get("games", {})
                         chat_history = data.get("chat_history", {})
                         for game_name, messages in chat_history.items():
@@ -97,6 +187,8 @@ async def persistent_connection():
                         window.after(0, update_games_ui)
                     
                     elif data.get("type") == "chat_history":
+                        if not authenticated:
+                            continue
                         game_name = data.get("game")
                         messages = data.get("messages", [])
                         print(f"Received chat history for {game_name}: {messages}")
@@ -107,6 +199,8 @@ async def persistent_connection():
                             window.after(0, lambda g=game_name, m=messages: display_chat_history(g, m))
                     
                     elif data.get("type") == "chat":
+                        if not authenticated:
+                            continue
                         game_name = data.get("game")
                         sender = data.get("sender", "Unknown")
                         message = data.get("message", "")
@@ -128,6 +222,7 @@ async def persistent_connection():
         ws_connection = False
         ws = None
         ws_loop = None
+        change_view("disconnected")
         clear_game_state()
         window.after(0, update_connection_status)
 
@@ -186,7 +281,7 @@ def send_chat_message(game_name):
         return
     
     message = chat_input.get()
-    if not message.strip() or not ws_connection or not ws or not ws_loop:
+    if not message.strip() or not ws_connection or not ws or not ws_loop or not authenticated:
         return
     
     try:
@@ -206,7 +301,7 @@ def update_games_ui():
     """Update the games UI based on the current games data received from the server."""
     global loaded_games
     
-    if not ws_connection:
+    if not ws_connection or not authenticated:
         return
 
     current_game_names = set(games_data.keys())
@@ -214,17 +309,17 @@ def update_games_ui():
     
     if not games_data:
         if game_buttons:
-            for widget in games_frame.winfo_children():
+            for widget in games_widget.winfo_children():
                 widget.destroy()
             game_buttons.clear()
             chat_widgets.clear()
-            label = tk.Label(games_frame, text="No games available", font=("Arial", 10))
+            label = tk.Label(games_widget, text="No games available", font=("Arial", 10))
             label.pack(pady=20)
             loaded_games = {}
         return
     
     if current_game_names != loaded_game_names:
-        for widget in games_frame.winfo_children():
+        for widget in games_widget.winfo_children():
             widget.destroy()
         game_buttons.clear()
         chat_widgets.clear()
@@ -244,7 +339,7 @@ def update_games_ui():
 
 def create_game_ui(game_name, game_info):
     """Create the UI elements for a given game."""
-    game_container = tk.Frame(games_frame, relief=tk.SUNKEN, bd=1, width=400)
+    game_container = tk.Frame(games_widget, relief=tk.SUNKEN, bd=1, width=400)
     game_container.pack(pady=10, padx=10)
     
     button_frame = tk.Frame(game_container)
@@ -340,7 +435,7 @@ def run_game(game_name):
     """Run a game as a separate process."""
     global game_instance
     
-    if not ws_connection:
+    if not ws_connection or not authenticated:
         print("Not connected to server")
         return
     
@@ -393,20 +488,35 @@ window = tk.Tk()
 window.title(f"Resonance - {player_name}")
 window.geometry("700x600")
 
+# login
+login_widget = tk.Frame(window)
+
+tk.Label(login_widget, text="Username", font=("Arial", 9)).grid(row=0, column=0, padx=5, pady=2, sticky="e")
+username_entry = tk.Entry(login_widget, font=("Arial", 9), width=20)
+username_entry.grid(row=0, column=1, padx=5, pady=2)
+
+tk.Label(login_widget, text="Password", font=("Arial", 9)).grid(row=1, column=0, padx=5, pady=2, sticky="e")
+password_entry = tk.Entry(login_widget, font=("Arial", 9), width=20, show="*")
+password_entry.grid(row=1, column=1, padx=5, pady=2)
+
+login_button = tk.Button(login_widget, text="Login", font=("Arial", 9), command=send_login)
+login_button.grid(row=2, column=0, columnspan=2, pady=6)
+
 # server connection status display
 connection_label = tk.Label(window, text="Disconnected from Server", font=("Arial", 10))
 connection_label.pack(pady=5)
 
 # player name display
-player_label = tk.Label(window, text=f"Player: {player_name}", font=("Arial", 9))
+player_label = tk.Label(window, text="Player: N/A", font=("Arial", 9))
 player_label.pack(pady=2)
 
 # create a centered frame for games
-center_frame = tk.Frame(window)
-center_frame.pack(fill=tk.BOTH, expand=True)
+main_widget = tk.Frame(window)
 
-games_frame = tk.Frame(center_frame)
-games_frame.pack(expand=True, anchor="center")
+games_widget = tk.Frame(main_widget)
+games_widget.pack(expand=True, anchor="center")
+
+change_view("disconnected")
 
 def main():
     """Main function to start the client."""
