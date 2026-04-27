@@ -23,3 +23,23 @@ class CircularBuffer:
         self.head = (self.head + 1) % self.capacity
         self.size -= 1
         return val
+    
+    def is_empty(self):
+        return self.size == 0
+
+    def is_full(self):
+        return self.size == self.capacity
+    
+    def peek(self):
+        """Returns the oldest item without removing it."""
+        if self.is_empty():
+            return None
+        return self.buffer.data[self.head]
+
+    def __str__(self):
+        """Shows the buffer content in chronological order."""
+        items = []
+        for i in range(self.size):
+            index = (self.head + i) % self.capacity
+            items.append(self.buffer.data[index])
+        return f"CircularBuffer: {items}"

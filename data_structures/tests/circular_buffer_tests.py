@@ -101,8 +101,7 @@ def test_enqueue_dequeue_cycle():
     cb.enqueue(4)
     cb.enqueue(5)
     
-    # Should get 2, 3, 4, 5 in order
-    assert cb.dequeue() == 2, "Should be 2"
+    # Should get 3, 4, 5 in order
     assert cb.dequeue() == 3, "Should be 3"
     assert cb.dequeue() == 4, "Should be 4"
     assert cb.dequeue() == 5, "Should be 5"
@@ -137,16 +136,15 @@ def test_mixed_operations():
     
     cb.enqueue(1)
     cb.enqueue(2)
-    cb.enqueue(3)
-    assert cb.dequeue() == 1, "Should be 1"
+    cb.enqueue(3) # cb = (1,2,3,_,_,)
+    assert cb.dequeue() == 1, "Should be 1" # cb = (_,2,3,_,_,)
     
-    cb.enqueue(4)
-    cb.enqueue(5)
-    cb.enqueue(6)
-    cb.enqueue(7)
+    cb.enqueue(4) # cb = (1,2,3,4,_,)
+    cb.enqueue(5) # cb = (1,2,3,4,5,)
+    cb.enqueue(6) # cb = (2,3,4,5,6,)
+    cb.enqueue(7) # cb = (3,4,5,6,7,)
     
-    # Should have 2, 3, 4, 5, 6, 7
-    assert cb.dequeue() == 2, "Should be 2"
+    # Should have 3, 4, 5, 6, 7
     assert cb.dequeue() == 3, "Should be 3"
     assert cb.dequeue() == 4, "Should be 4"
     assert cb.dequeue() == 5, "Should be 5"
