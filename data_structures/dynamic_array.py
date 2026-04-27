@@ -69,7 +69,7 @@ class ArrayList:
         if index > self.size - 1:
             raise IndexError("Error! Index out of range")
         else:
-            self.array[index] = value
+            self.data[index] = value
         pass
     
     def append(self, value):
