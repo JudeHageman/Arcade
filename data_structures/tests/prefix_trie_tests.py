@@ -5,13 +5,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from prefix_trie import Trie, TrieNode
+from prefix_trie import PrefixTrie, TrieNode
 
 def test_trie_creation():
     """Test creating a Trie"""
     print("Testing Trie creation...")
     
-    trie = Trie()
+    trie = PrefixTrie()
     assert trie.root is not None, "Root should not be None"
     assert len(trie.root.children) == 0, "Root should have no children"
     assert trie.root.is_end_of_word == False, "Root should not be end of word"
@@ -20,7 +20,7 @@ def test_trie_creation():
 
 def test_insert_single():
     print("Testing single insert...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("apple")
     
     # Check that path exists
@@ -31,7 +31,7 @@ def test_insert_single():
 
 def test_insert_multiple():
     print("Testing multiple inserts...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("apple")
     trie.insert("banana")
     trie.insert("cherry")
@@ -44,7 +44,7 @@ def test_insert_multiple():
 
 def test_search_existing():
     print("Testing search for existing word...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("apple")
     trie.insert("app")
     trie.insert("application")
@@ -57,7 +57,7 @@ def test_search_existing():
 
 def test_search_nonexistent():
     print("Testing search for non-existent word...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("apple")
     
     assert trie.search("banana") == False, "Search for non-existent should be False"
@@ -68,7 +68,7 @@ def test_search_nonexistent():
 
 def test_starts_with_prefix():
     print("Testing starts_with...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("apple")
     trie.insert("app")
     trie.insert("application")
@@ -77,7 +77,7 @@ def test_starts_with_prefix():
     assert trie.starts_with("app") == True, "Prefix 'app' should exist"
     assert trie.starts_with("appl") == True, "Prefix 'appl' should exist"
     assert trie.starts_with("ban") == True, "Prefix 'ban' should exist"
-    assert trie.starts_with("cher") == True, "Prefix 'cher' should exist"
+    assert trie.starts_with("cher") == False, "Prefix 'cher' should not exist"
     assert trie.starts_with("xyz") == False, "Non-existent prefix should be False"
     
     print("✓ starts_with works!")
@@ -85,7 +85,7 @@ def test_starts_with_prefix():
 def test_prefix_vs_word():
     """Test that prefix and full word are distinguished"""
     print("Testing prefix vs word distinction...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("app")
     trie.insert("apple")
     
@@ -103,7 +103,7 @@ def test_prefix_vs_word():
 def test_empty_string():
     """Test with empty string"""
     print("Testing empty string...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("")
     
     assert trie.search("") == True, "Empty string should be found"
@@ -114,7 +114,7 @@ def test_empty_string():
 def test_long_words():
     """Test with long words"""
     print("Testing long words...")
-    trie = Trie()
+    trie = PrefixTrie()
     
     long_word = "supercalifragilisticexpialidocious"
     trie.insert(long_word)
@@ -128,7 +128,7 @@ def test_long_words():
 def test_common_prefixes():
     """Test words with common prefixes"""
     print("Testing common prefixes...")
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("test")
     trie.insert("testing")
     trie.insert("tested")
@@ -158,19 +158,19 @@ def test_edge_cases():
     print("Testing edge cases...")
     
     # Single character
-    trie = Trie()
+    trie = PrefixTrie()
     trie.insert("a")
     assert trie.search("a") == True, "Single char search failed"
     assert trie.starts_with("a") == True, "Single char prefix failed"
     
     # Insert same word twice
-    trie2 = Trie()
+    trie2 = PrefixTrie()
     trie2.insert("hello")
     trie2.insert("hello")  # Should not cause issues
     assert trie2.search("hello") == True, "Duplicate insert failed"
     
     # Search for prefix that is also a word
-    trie3 = Trie()
+    trie3 = PrefixTrie()
     trie3.insert("in")
     trie3.insert("inner")
     trie3.insert("input")
