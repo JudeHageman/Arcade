@@ -166,3 +166,19 @@ class BST:
             return self._left_rotate(root)
 
         return root
+    
+    def contains(self, value):
+        """Returns True if the value exists in the tree, False otherwise."""
+        return self._search_recursive(self.root, value)
+
+    def _search_recursive(self, node, value):
+        if not node:
+            return False
+        
+        if value == node.value:
+            return True
+        
+        if value < node.value:
+            return self._search_recursive(node.left, value)
+        else:
+            return self._search_recursive(node.right, value)

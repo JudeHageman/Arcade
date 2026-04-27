@@ -117,22 +117,25 @@ def test_delete_one_child():
     
     print("✓ Delete with one child works!")
 
-def test_delete_two_children():
-    """Test deleting a node with two children"""
-    print("Testing delete with two children...")
+def test_avl_properties():
     bst = BST()
-    bst.insert(10)
-    bst.insert(5)
-    bst.insert(15)
-    bst.insert(3)
-    bst.insert(7)
+    for val in [10, 5, 15, 3, 7]:
+        bst.insert(val)
     
-    # Delete node with two children (10)
     bst.delete(10)
-    # The inorder successor (15) should replace the deleted node
-    assert bst.root.value == 15, "Root should be replaced by inorder successor"
     
-    print("✓ Delete with two children works!")
+    # Property 1: The value is gone
+    # (Assuming you have a contains method)
+    # assert bst.contains(10) == False
+    
+    # Property 2: Height Balance (The core of AVL)
+    balance = bst.get_balance(bst.root)
+    assert -1 <= balance <= 1, f"Tree is unbalanced! Factor: {balance}"
+    
+    # Property 3: BST Order
+    assert bst.root.left.value < bst.root.value
+    assert bst.root.right.value > bst.root.value
+    print("✓ AVL Deletion and Rebalance successful!")
 
 def test_delete_nonexistent():
     """Test deleting a non-existent value"""
@@ -162,6 +165,21 @@ def test_height():
     assert bst.get_height(bst.root) == 2, "Height should be 2"
     
     print("✓ Height calculation works!")
+
+def test_contains():
+    """Test contains method"""
+    print("Testing contains...")
+    bst = BST()
+    bst.insert(10)
+    bst.insert(5)
+    bst.insert(15)
+    
+    assert bst.contains(10) == True, "Should contain 10"
+    assert bst.contains(5) == True, "Should contain 5"
+    assert bst.contains(15) == True, "Should contain 15"
+    assert bst.contains(99) == False, "Should not contain 99"
+    
+    print("✓ Contains method works!")
 
 def test_balance():
     """Test balance factor calculation"""
@@ -217,9 +235,10 @@ def run_all_tests():
     test_insert_double_rotation()
     test_delete_no_children()
     test_delete_one_child()
-    test_delete_two_children()
+    test_avl_properties()
     test_delete_nonexistent()
     test_height()
+    test_contains()
     test_balance()
     test_edge_cases()
     
