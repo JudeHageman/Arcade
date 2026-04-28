@@ -64,3 +64,5 @@ class InputBox:
         # 3. Draw the Text
         # Add a little padding (10px) so the text isn't stuck to the edge
         screen.blit(self.txt_surface, (self.rect.x + 10, self.rect.y + (self.rect.height//2 - self.txt_surface.get_height()//2)))
+    def update_pos(self, x, y, w, h):
+        self.rect = pygame.Rect(x, y, w, h)

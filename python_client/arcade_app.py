@@ -5,12 +5,10 @@ import sys
 from screens.login_screen import LoginScreen
 from screens.menu_screen import MenuScreen
 from screens.leaderboard_screen import LeaderboardScreen
-from screens.chat_screen import ChatScreen
 from screens.profile_screen import ProfileScreen
 from Trie import PlayerTrie
 from screens.catalog_screen import CatalogScreen
-from screens.signup_screen import SignupScreen
-
+from screens.in_game_chat_screen import InGameChatScreen
 
  
 
@@ -33,27 +31,43 @@ class ArcadeApp:
         self.screens = {} # {"LOGIN": LoginScreen(self), "MENU": MenuScreen(self)} 식의 구조
         self.current_screen = None
         self.running = True
-        # 화면 인스턴스 생성 및 등록
+         
         self.screens = {
             "LOGIN": LoginScreen(self),
             "MENU": MenuScreen(self),
             "LEADERBOARD": LeaderboardScreen(self),
-            "CHAT": ChatScreen(self),
             "PROFILE": ProfileScreen(self),
             "CATALOG": CatalogScreen(self),
-            "SIGNUP": SignupScreen(self)
-            # "MENU": MenuScreen(self)
+            "CHAT": InGameChatScreen(self)
+             
         }
         
         # 시작 화면 설정
         self.switch_screen("LOGIN")
 
     def switch_screen(self, screen_name):
-         
-        if screen_name in self.screens:
-            self.current_screen = self.screens[screen_name]
+    # 1. 대상 스크린 가져오기
+        target_screen = self.screens[screen_name]
+        
+        # 2. 기본 플래그 설정
+        flags = pygame.DOUBLEBUF | pygame.HWSURFACE
+        
+        # 3. 스크린의 resizable 속성에 따라 창 모드 변경
+        if getattr(target_screen, 'resizable', False):
+            # 리사이징 활성화
+            self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), flags | pygame.RESIZABLE)
         else:
-            print(f"Error: Screen '{screen_name}' not found.")
+            # 리사이징 비활성화 (고정 크기로 강제 복구)
+            # 만약 창이 커진 상태였다면, 다시 기본 해상도로 되돌려야 디자인이 안 깨집니다.
+            self.WIDTH, self.HEIGHT = 1280, 720 
+            self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT), flags)
+            
+            # 비활성화된 스크린들이 배율 때문에 깨지지 않게 scale을 1.0으로 초기화할 수도 있습니다.
+            if hasattr(target_screen, 'scale'):
+                target_screen.scale = 1.0
+                if hasattr(target_screen, 'refresh_layout'):
+                    target_screen.refresh_layout()
+        self.current_screen = target_screen
 
     def run(self):
         """메인 루프: 이벤트 -> 업데이트 -> 그리기"""

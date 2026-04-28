@@ -1,87 +1,161 @@
-# client/screens/catalog_screen.py
 import pygame
+import math
+import os
+import sys
+import subprocess
 from screens.base_screen import BaseScreen
 from ui.button import Button
 
 class CatalogScreen(BaseScreen):
     def __init__(self, app):
-        """
-        Initialize the Catalog Screen where players select which mini-game to play.
-        """
         super().__init__(app)
+        self.resizable = True
+        self.base_w, self.base_h = 1280, 720
         
-        # Design settings
-        self.bg_color = (250, 250, 250)
-        self.grid_color = (235, 235, 235)
-        self.font_title = pygame.font.SysFont("arial", 36, bold=True)
-        self.font_desc = pygame.font.SysFont("arial", 16)
+        self.colors = {
+            "blue": (100, 200, 255),
+            "pink": (255, 120, 180),
+            "green": (120, 230, 120),
+            "black": (30, 30, 30),
+            "white": (255, 255, 255),
+            "staff": (235, 235, 235)
+        }
 
-        # Button Layout Settings
-        btn_w, btn_h = 240, 180
-        spacing = 30
-        start_x = (800 - (btn_w * 3 + spacing * 2)) // 2
-        y_pos = 220
-
-        # Game Selection Buttons
-        self.buttons = [
-            # Game 1: Lumberjack
-            Button(start_x, y_pos, btn_w, btn_h, "LUMBERJACK", 
-                   action=lambda: self.select_game("LUMBERJACK")),
-            
-            # Game 2: Ashes
-            Button(start_x + (btn_w + spacing), y_pos, btn_w, btn_h, "ASHES", 
-                   action=lambda: self.select_game("ASHES")),
-            
-            # Game 3: Gardener
-            Button(start_x + (btn_w + spacing) * 2, y_pos, btn_w, btn_h, "GARDENER", 
-                   action=lambda: self.select_game("GARDENER")),
-            
-            # Navigation
-            Button(50, 40, 90, 35, "BACK", action=lambda: self.app.switch_screen("MENU"))
+         
+        self.game_data = [
+            {"name": "LUMBERJACK", "path": "../../games/game_1/game/main.py", "desc": "Fast-paced chopping action"},
+            {"name": "NEON BEAT", "path": "../../games/game_2/main.py", "desc": "Rhythm and lights"},
+            {"name": "MELODY DASH", "path": "../../games/game_3/main.py", "desc": "Music platformer"}
         ]
 
-    def select_game(self, game_name):
-        """
-        Save the selected game to shared_data and move to the Game Play screen.
-        """
-        print(f"DEBUG: Selected Game -> {game_name}")
-        self.app.shared_data["selected_game"] = game_name
+        self.play_buttons = []
+        self.back_btn = None
+        self.time = 0
+        self.refresh_layout()
+
+    def refresh_layout(self):
+         
+        self.scale = max(self.app.WIDTH / self.base_w, 0.6)
+        s = self.scale
+        cx, cy = self.app.WIDTH // 2, self.app.HEIGHT // 2
+
+         
+        self.font_title = pygame.font.SysFont("Arial", max(int(54 * s), 32), bold=True)
+        self.font_card = pygame.font.SysFont("Arial", max(int(24 * s), 18), bold=True)
+        self.font_desc = pygame.font.SysFont("Arial", max(int(16 * s), 12))
+
+         
+        self.back_btn = Button(int(40 * s), int(40 * s), int(120 * s), int(45 * s), 
+                               "< BACK", color=self.colors["staff"], action=lambda: self.app.switch_screen("MENU"))
+
         
-        # Switch to the screen where the actual game logic will live
-        self.app.switch_screen("GAME_PLAY")
+        self.play_buttons = []
+        card_w = int(280 * s)
+        card_h = int(380 * s)
+        spacing = int(40 * s)
+        total_w = (len(self.game_data) * card_w) + ((len(self.game_data) - 1) * spacing)
+        
+        start_x = cx - total_w // 2
+        y_pos = cy - card_h // 2 + int(40 * s)
+
+        for i, game in enumerate(self.game_data):
+            x = start_x + i * (card_w + spacing)
+            
+             
+            btn = Button(x + int(40 * s), y_pos + card_h - int(75 * s), 
+                         card_w - int(80 * s), int(50 * s), "PLAY", 
+                         color=self.colors["black"], 
+                         action=lambda p=game["path"]: self.select_game(p))
+            
+            self.play_buttons.append({
+                "rect": pygame.Rect(x, y_pos, card_w, card_h),
+                "btn": btn,
+                "name": game["name"],
+                "desc": game["desc"]
+            })
+
+    def select_game(self, game_path):
+        abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), game_path))
+        game_dir = os.path.dirname(abs_path)
+        username = self.app.shared_data.get("username", "Guest")
+        
+        try:
+             
+            process = subprocess.Popen([sys.executable, abs_path, username], cwd=game_dir)
+            
+             
+            self.app.shared_data["current_game_process"] = process
+            
+            self.app.switch_screen("CHAT")
+        except Exception as e:
+            print(f"ERROR: {e}")
+
+    def draw_decorations(self, screen, theme_color):
+        self.time += 0.02
+        s = self.scale
+         
+        for i in range(5):
+            y = int(500 * s) + (i * int(30 * s))
+            pygame.draw.line(screen, self.colors["staff"], (0, y), (self.app.WIDTH, y - int(100 * s)), 2)
+        
+         
+        pygame.draw.circle(screen, theme_color, (self.app.WIDTH - int(100*s), int(100*s)), int(60*s + math.sin(self.time)*5), 3)
+        
+         
+        note_colors = [self.colors["blue"], self.colors["pink"], self.colors["green"]]
+        for i in range(4):
+            nx = (200 + i * 300) * s
+            ny = (100 + (i % 2) * 50) * s
+            self.draw_music_note(screen, (nx, ny + math.sin(self.time * 3 + i) * 15), note_colors[i % 3])
+
+    def draw_music_note(self, screen, pos, color):
+        s = self.scale
+        x, y = int(pos[0]), int(pos[1])
+        r = 10 * s
+        pygame.draw.circle(screen, color, (x, y), int(r))
+        pygame.draw.line(screen, color, (x + r - 2, y), (x + r - 2, y - 28 * s), int(3 * s))
+        pygame.draw.line(screen, color, (x + r - 2, y - 28 * s), (x + r + 10 * s, y - 18 * s), int(3 * s))
 
     def handle_events(self, events):
         for event in events:
-            for btn in self.buttons:
-                btn.handle_event(event)
-
-    def draw_grid(self, screen):
-        """Standard grid background for consistency."""
-        for x in range(0, 800, 40):
-            pygame.draw.line(screen, self.grid_color, (x, 0), (x, 600))
-        for y in range(0, 600, 40):
-            pygame.draw.line(screen, self.grid_color, (0, y), (800, y))
+            if event.type == pygame.VIDEORESIZE:
+                self.app.WIDTH, self.app.HEIGHT = event.w, event.h
+                self.refresh_layout()
+            
+            self.back_btn.handle_event(event)
+            for item in self.play_buttons:
+                item["btn"].handle_event(event)
 
     def draw(self, screen):
-        self.draw_grid(screen)
-        screen.fill(self.bg_color)
-
-        # Header Text
-        title_surf = self.font_title.render("SELECT YOUR MISSION", True, (0, 0, 0))
-        screen.blit(title_surf, (220, 100))
-
-        # Game Descriptions (Optional, adds a professional touch)
-        descriptions = [
-            "Chop wood fast!",
-            "Avoid the rising fire.",
-            "Plant flowers carefully."
-        ]
+         
+        faction = self.app.shared_data.get("faction", "blue")
+        theme_color = self.colors.get(faction, self.colors["blue"])
         
-        # Draw all buttons
-        for i, btn in enumerate(self.buttons):
-            btn.draw(screen)
+        screen.fill(self.colors["white"])
+        self.draw_decorations(screen, theme_color)
+
+         
+        title_surf = self.font_title.render("GAME CATALOG", True, self.colors["black"])
+        screen.blit(title_surf, (self.app.WIDTH // 2 - title_surf.get_width() // 2, int(80 * self.scale)))
+
+         
+        s = self.scale
+        for item in self.play_buttons:
+            rect = item["rect"]
             
-            # Draw description text under the main 3 buttons
-            if i < 3: 
-                desc_surf = self.font_desc.render(descriptions[i], True, (100, 100, 100))
-                screen.blit(desc_surf, (btn.rect.x + 60, btn.rect.y + btn.rect.height + 10))
+            
+            pygame.draw.rect(screen, self.colors["white"], rect, border_radius=int(15 * s))
+            pygame.draw.rect(screen, theme_color, rect, int(3 * s), border_radius=int(15 * s))
+            
+             
+            name_surf = self.font_card.render(item["name"], True, self.colors["black"])
+            desc_surf = self.font_desc.render(item["desc"], True, (150, 150, 150))
+            
+            screen.blit(name_surf, (rect.x + int(20 * s), rect.y + int(30 * s)))
+            screen.blit(desc_surf, (rect.x + int(20 * s), rect.y + int(70 * s)))
+            
+             
+            item["btn"].color = theme_color
+            item["btn"].draw(screen)
+
+        self.back_btn.draw(screen)
