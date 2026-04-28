@@ -31,7 +31,7 @@ accounts = {}
 
 # library of games with their ports and paths
 GAMES_LIBRARY = {
-    "Game 1": {"port": 8080, "path": "game_1"},
+    "Immortal Tree": {"port": 8080, "path": "immortal_tree"},
     "Game 2": {"port": 8081, "path": "game_2"},
     "Game 3": {"port": 8082, "path": "game_3"}
 }
@@ -72,8 +72,7 @@ def authenticate_account(username, password):
 
     if account is None:
         accounts[username] = {
-            "password": password_hash,
-            "created_at": datetime.now().isoformat()
+            "password": password_hash
         }
         save_accounts()
         return True
