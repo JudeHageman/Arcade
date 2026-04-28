@@ -28,6 +28,7 @@ server_url = f"ws://127.0.0.1:{server_port}"
 
 # player name is assigned by the server after login
 player_name = "N/A"
+player_team = "default"
 
 # print connection info
 print(f"Connecting to server: {server_url}")
@@ -48,6 +49,7 @@ chat_widgets = {}
 login_widget = None
 main_widget = None
 games_widget = None
+team_widget = None
 pending_username = ""
 
 def change_view(view):
@@ -59,11 +61,15 @@ def change_view(view):
         player_name = "N/A"
         if 'player_label' in globals():
             player_label.config(text="Player: N/A")
+        if 'team_label' in globals():
+            team_label.config(text="Team: N/A")
         window.title("Resonance - N/A")
         if login_widget:
             login_widget.pack_forget()
         if main_widget:
             main_widget.pack_forget()
+        if team_widget:
+            team_widget.pack_forget()
         return
 
     if view == "login":
@@ -99,13 +105,38 @@ def clear_game_state():
     for widget in games_widget.winfo_children():
         widget.destroy()
 
-def change_username(username):
-    """Update the displayed username after a successful login."""
+def show_team_select():
+    """Show the team selection buttons for new accounts."""
+    if team_widget:
+        team_widget.pack(pady=6)
+
+def hide_team_select():
+    """Hide the team selection buttons."""
+    if team_widget:
+        team_widget.pack_forget()
+
+def send_team(team):
+    """Send the chosen team to the server to complete account creation."""
+    global ws, ws_loop
+    if not ws or not ws_loop:
+        return
+    payload = json.dumps({
+        "type": "user",
+        "action": "select_team",
+        "team": team
+    })
+    asyncio.run_coroutine_threadsafe(ws.send(payload), ws_loop)
+    hide_team_select()
+
+
+def change_username(username, team="default"):
+    """Update the displayed username and team after a successful login."""
     global player_name, authenticated
 
     authenticated = True
     player_name = username
     player_label.config(text=f"Player: {player_name}")
+    team_label.config(text=f"Team: {team.capitalize()}")
     window.title(f"Resonance - {player_name}")
 
     if username_entry:
@@ -131,7 +162,8 @@ def send_login():
         return
     pending_username = username
     payload = json.dumps({
-        "type": "login",
+        "type": "user",
+        "action": "login",
         "username": username,
         "password": password
     })
@@ -153,7 +185,7 @@ def print_received_games_state():
 
 async def persistent_connection():
     """Maintain a persistent connection to the server, automatically reconnecting if the connection is lost."""
-    global ws_connection, ws, ws_loop, games_data, authenticated
+    global ws_connection, ws, ws_loop, games_data, authenticated, player_team
     
     try:
         async with websockets.connect(server_url) as ws_conn:
@@ -170,49 +202,31 @@ async def persistent_connection():
                 try:
                     data = json.loads(payload)
 
-                    if data.get("type") == "login_success":
-                        window.after(0, lambda username=pending_username: change_username(username))
+                    if data.get("type") == "select_team":
+                        window.after(0, show_team_select)
                         continue
-                    
-                    if data.get("type") == "games_library" or "games" in data:
-                        if not authenticated:
-                            continue
-                        games_data = data.get("games", {})
+
+                    if data.get("type") == "initial":
+                        authenticated = True
+                        username = data.get("username", "")
+                        player_team = data.get("team", "default")
                         chat_history = data.get("chat_history", {})
                         for game_name, messages in chat_history.items():
-                            if game_name in games_data:
-                                games_data[game_name]["chat_history"] = messages
+                            games_data.setdefault(game_name, {})["chat_history"] = messages
+                        window.after(0, lambda u=username, t=player_team: change_username(u, t))
+                        continue
+
+                    if data.get("type") == "global":
+                        if not authenticated:
+                            continue
+                        for game_name, game_info in data.get("games", {}).items():
+                            if game_name not in games_data:
+                                games_data[game_name] = {}
+                            games_data[game_name].update(game_info)
+                        for game_name, messages in data.get("recent_chats", {}).items():
+                            games_data.setdefault(game_name, {}).setdefault("chat_history", []).extend(messages)
                         print_received_games_state()
-                        # Schedule UI update on main thread
                         window.after(0, update_games_ui)
-                    
-                    elif data.get("type") == "chat_history":
-                        if not authenticated:
-                            continue
-                        game_name = data.get("game")
-                        messages = data.get("messages", [])
-                        print(f"Received chat history for {game_name}: {messages}")
-                        if game_name in games_data:
-                            games_data[game_name]["chat_history"] = messages
-                            print_received_games_state()
-                        if game_name in chat_widgets:
-                            window.after(0, lambda g=game_name, m=messages: display_chat_history(g, m))
-                    
-                    elif data.get("type") == "chat":
-                        if not authenticated:
-                            continue
-                        game_name = data.get("game")
-                        sender = data.get("sender", "Unknown")
-                        message = data.get("message", "")
-                        print(f"Received chat for {game_name}: {sender}: {message}")
-                        if game_name in games_data:
-                            games_data.setdefault(game_name, {}).setdefault("chat_history", []).append({
-                                "sender": sender,
-                                "message": message
-                            })
-                            print_received_games_state()
-                        if game_name in chat_widgets:
-                            window.after(0, lambda g=game_name, s=sender, m=message: add_chat_message(g, s, m))
                         
                 except json.JSONDecodeError:
                     print(f"Received non-JSON message: {payload}")
@@ -286,9 +300,9 @@ def send_chat_message(game_name):
     
     try:
         payload = json.dumps({
-            "type": "chat",
+            "type": "user",
+            "action": "chat",
             "game": game_name,
-            "sender": player_name,
             "message": message.strip()
         })
         asyncio.run_coroutine_threadsafe(ws.send(payload), ws_loop)
@@ -425,6 +439,24 @@ def update_game_status(game_name, game_info):
     status_label = game_buttons[game_name]["status_label"]
     status_label.config(text=f"Status: {display_status}")
 
+def _read_game_stdout(proc):
+    """Read stdout from the game process, forwarding score lines via the existing WebSocket."""
+    try:
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line.startswith("[SCORE]"):
+                try:
+                    score_data = json.loads(line[len("[SCORE]"):])
+                    if ws and ws_loop and ws_connection and authenticated:
+                        asyncio.run_coroutine_threadsafe(ws.send(json.dumps(score_data)), ws_loop)
+                except Exception:
+                    pass
+            else:
+                print(line)
+    except Exception:
+        pass
+
+
 def restore_game_button(game_process, game_name):
     """Restore a game button after its process closes."""
     game_process.wait()
@@ -460,9 +492,14 @@ def run_game(game_name):
         print(f"Launching {game_name} from {game_dir}")
         
         game_instance = subprocess.Popen(
-            [sys.executable, str(game_path_file), player_name, "--port", str(game_port)], 
-            cwd=str(game_dir)
+            [sys.executable, str(game_path_file), player_name, "--port", str(game_port), "--team", player_team], 
+            cwd=str(game_dir),
+            stdout=subprocess.PIPE,
+            text=True,
+            bufsize=1
         )
+
+        threading.Thread(target=_read_game_stdout, args=(game_instance,), daemon=True).start()
 
         if game_name in game_buttons:
             game_buttons[game_name]["button"].config(text="Close Game", command=lambda: close_game(game_name))
@@ -509,6 +546,23 @@ connection_label.pack(pady=5)
 # player name display
 player_label = tk.Label(window, text="Player: N/A", font=("Arial", 9))
 player_label.pack(pady=2)
+
+team_label = tk.Label(window, text="Team: N/A", font=("Arial", 9))
+team_label.pack(pady=0)
+
+# team selection (shown only for new accounts, hidden by default)
+team_widget = tk.Frame(window)
+tk.Label(team_widget, text="Choose your team:", font=("Arial", 9)).pack(pady=(4, 2))
+team_btn_frame = tk.Frame(team_widget)
+team_btn_frame.pack()
+for _team, _color in [("pink", "#ffb6c1"), ("green", "#b4eeb4"), ("blue", "#add8e6")]:
+    tk.Button(
+        team_btn_frame,
+        text=_team.capitalize(),
+        font=("Arial", 9),
+        width=10,
+        command=lambda t=_team: send_team(t)
+    ).pack(side=tk.LEFT, padx=6)
 
 # create a centered frame for games
 main_widget = tk.Frame(window)

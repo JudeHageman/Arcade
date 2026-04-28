@@ -3,6 +3,7 @@ import sys
 import argparse
 from settings import *
 from level import Level
+from score_status import ScoreStatus
 
 
 class Game:
@@ -43,6 +44,18 @@ class Game:
             self.server_port, 
             self.serializer
         )
+
+        # Start score status reporter thread
+        reporter = ScoreStatus(
+            self.player_name,
+            GAME_NAME,
+            lambda: (
+                self.level.individual_score,
+                self.level.team_scores.get(self.team, 0),
+                self.team
+            )
+        )
+        reporter.start()
         
         # Game loop
         while self.running:
