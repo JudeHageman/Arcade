@@ -60,6 +60,8 @@ def change_view(view):
             player_label.config(text="Player: N/A")
         if 'team_label' in globals():
             team_label.config(text="Team: N/A")
+        if 'logout_button' in globals():
+            logout_button.pack_forget()
         window.title("Resonance - N/A")
         if login_widget:
             login_widget.pack_forget()
@@ -145,7 +147,14 @@ def change_username(username, team="default"):
         password_entry.config(state=tk.DISABLED)
     if login_button:
         login_button.config(state=tk.DISABLED)
+    logout_button.pack(pady=(2, 0))
     change_view("games")
+
+def logout():
+    """Close the WebSocket connection to logout."""
+    global ws, ws_loop
+    if ws and ws_loop:
+        asyncio.run_coroutine_threadsafe(ws.close(), ws_loop)
 
 def send_login():
     """Send the username and password to the server for authentication."""
@@ -213,22 +222,25 @@ async def persistent_connection():
                         
                 except json.JSONDecodeError:
                     pass
-                    
-    except Exception as e:
-        ws_connection = False
-        ws = None
-        ws_loop = None
-        change_view("disconnected")
-        clear_game_state()
-        window.after(0, update_connection_status)
 
-        def retry_connection():
-            try:
-                asyncio.run(persistent_connection())
-            except Exception:
-                pass
+    except Exception:
+        pass
 
-        window.after(3000, lambda: threading.Thread(target=retry_connection, daemon=True).start())
+    # runs on both normal close and error
+    ws_connection = False
+    ws = None
+    ws_loop = None
+    window.after(0, lambda: change_view("disconnected"))
+    window.after(0, clear_game_state)
+    window.after(0, update_connection_status)
+
+    def retry_connection():
+        try:
+            asyncio.run(persistent_connection())
+        except Exception:
+            pass
+
+    window.after(3000, lambda: threading.Thread(target=retry_connection, daemon=True).start())
 
 def update_connection_status():
     """Update the connection status label in the UI based on the current connection state."""
@@ -542,6 +554,9 @@ player_label.pack(pady=2)
 
 team_label = tk.Label(window, text="Team: N/A", font=("Arial", 9))
 team_label.pack(pady=0)
+
+# hidden by default, shown after login
+logout_button = tk.Button(window, text="Logout", font=("Arial", 9), command=logout)
 
 # team selection (shown only for new accounts, hidden by default)
 team_widget = tk.Frame(window)

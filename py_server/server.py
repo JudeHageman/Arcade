@@ -20,17 +20,20 @@ import sys
 # allow custom port via command line argument, default to 8000
 server_port = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8000
 
+# data folder
+data_folder = Path(__file__).parent.parent / "data"
+
 # account storage
-accounts_file = Path(__file__).with_name("accounts.json")
+accounts_file = data_folder / "accounts.ndjson"
 
 # chat log
-chats_file = Path(__file__).with_name("chats.ndjson")
+chats_file = data_folder / "chats.ndjson"
 
 # sessions log (all game sessions for all users)
-sessions_file = Path(__file__).with_name("sessions.ndjson")
+sessions_file = data_folder / "sessions.ndjson"
 
 # games library
-games_file = Path(__file__).with_name("games.json")
+games_file = data_folder / "games.ndjson"
 
 # server state
 connected_clients = {}
@@ -41,12 +44,23 @@ accounts = {}
 
 def load_games():
     """Load games from disk."""
+    if not games_file.exists():
+        return {}
+    games = {}
     try:
         with games_file.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    games.update(entry)
+                except Exception:
+                    continue
     except Exception:
-        return {}
+        pass
+    return games
 
 GAMES_LIBRARY = load_games()
 
@@ -54,13 +68,21 @@ def load_accounts():
     """Load saved accounts from disk."""
     if not accounts_file.exists():
         return {}
-
+    accounts = {}
     try:
         with accounts_file.open("r", encoding="utf-8") as file_handle:
-            data = json.load(file_handle)
-            return data if isinstance(data, dict) else {}
+            for line in file_handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    accounts.update(entry)
+                except Exception:
+                    continue
     except Exception:
-        return {}
+        pass
+    return accounts
     
 # load accounts on server startup
 accounts = load_accounts()
@@ -98,20 +120,11 @@ def load_chats():
 # load chat history on server startup
 game_chats = load_chats()
 
-def save_accounts():
-    """Save accounts to file."""
+def append_account(username, account_data):
+    """Append a new account record to accounts.ndjson."""
     try:
-        with accounts_file.open("w", encoding="utf-8") as file_handle:
-            file_handle.write("{\n")
-            items = list(accounts.items())
-            for i, (username, account) in enumerate(items):
-                entry = json.dumps({username: account})
-                content = entry[1:-1]
-                file_handle.write(f"  {content}")
-                if i < len(items) - 1:
-                    file_handle.write(",")
-                file_handle.write("\n")
-            file_handle.write("}")
+        with accounts_file.open("a", encoding="utf-8") as file_handle:
+            file_handle.write(json.dumps({username: account_data}) + "\n")
     except Exception:
         pass
 
@@ -145,8 +158,9 @@ def authenticate_account(username, password):
 
 def create_account(username, password_hash, team="default"):
     """Persist a new account with its pre-hashed password and team."""
-    accounts[username] = {"password": password_hash, "team": team}
-    save_accounts()
+    account_data = {"password": password_hash, "team": team}
+    accounts[username] = account_data
+    append_account(username, account_data)
 
 async def check_game_server(host, port):
     """Check if a game server is running on the given host and port."""
