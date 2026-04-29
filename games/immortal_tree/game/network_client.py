@@ -81,20 +81,14 @@ class NetworkClient:
             # Format: STATE||<serialized_player1>||<serialized_player2>||...
             # Players are separated by || (double pipe) to avoid conflicts with serialization formats
             parts = msg.split('||')
-            print(f"[DEBUG] Received STATE message with {len(parts)-1} player entries")
             players = {}
             
             for i in range(1, len(parts)):
                 if parts[i]:
-                    print(f"[DEBUG] Parsing player {i}: '{parts[i][:50]}...'")  # First 50 chars
                     player_data = self._deserialize_player(parts[i])
                     if player_data:
-                        print(f"[DEBUG] Parsed player: ID={player_data['id']}, Name={player_data['name']}")
                         players[player_data['id']] = player_data
-                    else:
-                        print(f"[DEBUG] Failed to parse player data")
             
-            print(f"[DEBUG] Total players parsed: {len(players)}")
             self.update_queue.put(players)
     
     def _deserialize_player(self, data):

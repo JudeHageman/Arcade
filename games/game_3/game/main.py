@@ -312,7 +312,7 @@ if __name__ == '__main__':
                        default='text',
                        help='Serialization format: text (default), json, or binary')
     
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
     
     print("="*50)
     print(f"Starting game as '{args.name}'")

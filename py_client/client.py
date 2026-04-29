@@ -30,10 +30,6 @@ server_url = f"ws://127.0.0.1:{server_port}"
 player_name = "N/A"
 player_team = "default"
 
-# print connection info
-print(f"Connecting to server: {server_url}")
-print(f"Player name: {player_name}")
-
 # client state
 ws = None
 ws_connection = False
@@ -42,6 +38,7 @@ authenticated = False
 games_data = {}
 loaded_games = {}
 game_instance = None
+running_game_name = None
 game_buttons = {}
 username_entry = None
 password_entry = None
@@ -107,6 +104,8 @@ def clear_game_state():
 
 def show_team_select():
     """Show the team selection buttons for new accounts."""
+    if login_widget:
+        login_widget.pack_forget()
     if team_widget:
         team_widget.pack(pady=6)
 
@@ -169,20 +168,6 @@ def send_login():
     })
     asyncio.run_coroutine_threadsafe(ws.send(payload), ws_loop)
 
-def print_received_games_state():
-    """Print the current games data received from the server."""
-    games_snapshot = {}
-
-    for game_name, game_info in games_data.items():
-        games_snapshot[game_name] = {
-            "port": game_info.get("port"),
-            "path": game_info.get("path"),
-            "status": game_info.get("status"),
-            "chat_history": game_info.get("chat_history", [])
-        }
-
-    print(f"\n[STATUS] {games_snapshot}")
-
 async def persistent_connection():
     """Maintain a persistent connection to the server, automatically reconnecting if the connection is lost."""
     global ws_connection, ws, ws_loop, games_data, authenticated, player_team
@@ -195,7 +180,6 @@ async def persistent_connection():
             authenticated = False
             window.after(0, update_connection_status)  
             window.after(0, lambda: change_view("login"))
-            print("\n[STATUS] Server connected")
             
             # listen for messages from the server
             async for payload in ws_conn:
@@ -225,14 +209,12 @@ async def persistent_connection():
                             games_data[game_name].update(game_info)
                         for game_name, messages in data.get("recent_chats", {}).items():
                             games_data.setdefault(game_name, {}).setdefault("chat_history", []).extend(messages)
-                        print_received_games_state()
                         window.after(0, update_games_ui)
                         
                 except json.JSONDecodeError:
-                    print(f"Received non-JSON message: {payload}")
+                    pass
                     
     except Exception as e:
-        print("\n[STATUS] Not connected to server")
         ws_connection = False
         ws = None
         ws_loop = None
@@ -243,8 +225,8 @@ async def persistent_connection():
         def retry_connection():
             try:
                 asyncio.run(persistent_connection())
-            except Exception as retry_error:
-                print(f"Reconnect failed: {retry_error}")
+            except Exception:
+                pass
 
         window.after(3000, lambda: threading.Thread(target=retry_connection, daemon=True).start())
 
@@ -308,8 +290,8 @@ def send_chat_message(game_name):
         asyncio.run_coroutine_threadsafe(ws.send(payload), ws_loop)
         
         chat_input.delete(0, tk.END)
-    except Exception as e:
-        print(f"Error sending chat: {e}")
+    except Exception:
+        pass
 
 def update_games_ui():
     """Update the games UI based on the current games data received from the server."""
@@ -430,56 +412,61 @@ def update_game_status(game_name, game_info):
     
     # update button state and text
     button = game_buttons[game_name]["button"]
-    button.config(
-        state=tk.NORMAL if status == "connected" else tk.DISABLED,
-        text=f"Launch {game_name}"
-    )
+    
+    # only update button text if game is not currently running
+    if game_name != running_game_name:
+        button.config(
+            state=tk.NORMAL if status == "connected" else tk.DISABLED,
+            text=f"Launch {game_name}"
+        )
+    else:
+        button.config(state=tk.NORMAL)
     
     # update status label
     status_label = game_buttons[game_name]["status_label"]
     status_label.config(text=f"Status: {display_status}")
 
 def _read_game_stdout(proc):
-    """Read stdout from the game process, forwarding score lines via the existing WebSocket."""
+    """Read stdout from the game process, forwarding user messages via the existing WebSocket."""
     try:
         for line in proc.stdout:
             line = line.rstrip()
-            if line.startswith("[SCORE]"):
+            if line.startswith("[USER] "):
                 try:
-                    score_data = json.loads(line[len("[SCORE]"):])
+                    user_data = json.loads(line[len("[USER] "):])
                     if ws and ws_loop and ws_connection and authenticated:
-                        asyncio.run_coroutine_threadsafe(ws.send(json.dumps(score_data)), ws_loop)
-                except Exception:
+                        asyncio.run_coroutine_threadsafe(ws.send(json.dumps(user_data)), ws_loop)
+                except Exception as e:
                     pass
             else:
-                print(line)
-    except Exception:
+                pass
+    except Exception as e:
         pass
 
 
 def restore_game_button(game_process, game_name):
     """Restore a game button after its process closes."""
+    global game_instance
     game_process.wait()
-    if game_name in game_buttons:
-        game_buttons[game_name]["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
+    # Only restore the button if the game_instance hasn't been manually set to None (by user closing)
+    if game_instance is not None and game_instance.pid == game_process.pid:
+        if game_name in game_buttons:
+            game_buttons[game_name]["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
 
 def run_game(game_name):
     """Run a game as a separate process."""
-    global game_instance
+    global game_instance, running_game_name
     
     if not ws_connection or not authenticated:
-        print("Not connected to server")
         return
     
     if game_name not in games_data:
-        print(f"Game {game_name} not found")
         return
     
     game_port = games_data[game_name].get("port")
     game_path = games_data[game_name].get("path")
     
     if not game_path:
-        print(f"Game path not found for {game_name}")
         return
     
     try:
@@ -489,15 +476,20 @@ def run_game(game_name):
         game_dir = client_dir.parent / "games" / game_path / "game"
         game_path_file = game_dir / "main.py"
         
-        print(f"Launching {game_name} from {game_dir}")
+        # build command with --team [color] only if game supports resonance
+        cmd = [sys.executable, str(game_path_file), player_name, "--port", str(game_port)]
+        resonance = games_data[game_name].get("resonance", False)
+        if resonance:
+            cmd.extend(["--team", player_team])
         
         game_instance = subprocess.Popen(
-            [sys.executable, str(game_path_file), player_name, "--port", str(game_port), "--team", player_team], 
+            cmd,
             cwd=str(game_dir),
             stdout=subprocess.PIPE,
             text=True,
             bufsize=1
         )
+        running_game_name = game_name
 
         threading.Thread(target=_read_game_stdout, args=(game_instance,), daemon=True).start()
 
@@ -507,16 +499,17 @@ def run_game(game_name):
         watch_thread = threading.Thread(target=restore_game_button, args=(game_instance, game_name), daemon=True)
         watch_thread.start()
         
-    except Exception as e:
-        print(f"Error launching game: {str(e)}")
+    except Exception:
+        pass
 
 def close_game(game_name):
     """Close the currently running game process."""
-    global game_instance
+    global game_instance, running_game_name
 
     if game_instance:
         game_instance.terminate()
         game_instance = None
+        running_game_name = None
         if game_name in game_buttons:
             game_buttons[game_name]["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
 
@@ -589,7 +582,6 @@ def main():
             game_instance.terminate()
         if window.winfo_exists():
             window.destroy()
-        print("\nClient stopped.")
 
 # entry point to start the client
 if __name__ == "__main__":

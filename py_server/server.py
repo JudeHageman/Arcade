@@ -26,8 +26,11 @@ accounts_file = Path(__file__).with_name("accounts.json")
 # chat log
 chats_file = Path(__file__).with_name("chats.ndjson")
 
-# team storage
-teams_file = Path(__file__).with_name("teams.json")
+# sessions log (all game sessions for all users)
+sessions_file = Path(__file__).with_name("sessions.ndjson")
+
+# games library
+games_file = Path(__file__).with_name("games.json")
 
 # server state
 connected_clients = {}
@@ -35,14 +38,17 @@ current_games_status = {}
 game_chats = {}
 recent_chats = {}
 accounts = {}
-teams = {}
 
-# library of games with their ports and paths
-GAMES_LIBRARY = {
-    "Immortal Tree": {"port": 8080, "path": "immortal_tree"},
-    "Game 2": {"port": 8081, "path": "game_2"},
-    "Game 3": {"port": 8082, "path": "game_3"}
-}
+def load_games():
+    """Load games from disk."""
+    try:
+        with games_file.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+GAMES_LIBRARY = load_games()
 
 def load_accounts():
     """Load saved accounts from disk."""
@@ -92,40 +98,28 @@ def load_chats():
 # load chat history on server startup
 game_chats = load_chats()
 
-def save_teams():
-    """Save team scores to file."""
-    try:
-        with teams_file.open("w", encoding="utf-8") as f:
-            json.dump(teams, f, indent=2)
-    except Exception:
-        pass
-
-def load_teams():
-    """Load team scores from disk, initialising missing games/teams to 0."""
-    base = {}
-    if teams_file.exists():
-        try:
-            with teams_file.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    base = data
-        except Exception:
-            pass
-
-    for game_name in GAMES_LIBRARY:
-        base.setdefault(game_name, {})
-        for team in ("pink", "green", "blue"):
-            base[game_name].setdefault(team, 0)
-    return base
-
-# load teams on server startup
-teams = load_teams()
-
 def save_accounts():
     """Save accounts to file."""
     try:
         with accounts_file.open("w", encoding="utf-8") as file_handle:
-            json.dump(accounts, file_handle, indent=2)
+            file_handle.write("{\n")
+            items = list(accounts.items())
+            for i, (username, account) in enumerate(items):
+                entry = json.dumps({username: account})
+                content = entry[1:-1]
+                file_handle.write(f"  {content}")
+                if i < len(items) - 1:
+                    file_handle.write(",")
+                file_handle.write("\n")
+            file_handle.write("}")
+    except Exception:
+        pass
+
+def append_session(entry):
+    """Append a session record to sessions.ndjson."""
+    try:
+        with sessions_file.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
     except Exception:
         pass
 
@@ -174,11 +168,13 @@ async def send_status():
             for game_name, game_info in GAMES_LIBRARY.items():
                 port = game_info["port"]
                 path = game_info["path"]
+                resonance = game_info.get("resonance", False)
                 connected = await check_game_server("127.0.0.1", port)
                 games_status[game_name] = {
                     "port": port,
                     "path": path,
-                    "status": "connected" if connected else "disconnected"
+                    "status": "connected" if connected else "disconnected",
+                    "resonance": resonance
                 }
 
             current_games_status = games_status
@@ -194,8 +190,6 @@ async def send_status():
                 "games": games_status,
                 "recent_chats": recent_chats
             })
-
-            print(f"\n[GLOBAL] {message}")
 
             clients = [client for client, state in connected_clients.items() if state.get("authenticated")]
             if clients:
@@ -229,26 +223,31 @@ async def handle_client(client):
                 if client_state is None:
                     continue
 
-                if data.get("type") == "score":
-                    player = data.get("player", "").strip()
-                    game_name = data.get("game", "")
-                    individual_score = data.get("individual_score", 0)
-                    team = data.get("team", "")
-                    team_score = data.get("team_score", 0)
-
-                    if player and game_name:
-                        if player in accounts:
-                            accounts[player].setdefault("scores", {})[game_name] = individual_score
-                            save_accounts()
-
-                        if game_name in teams and team in teams[game_name]:
-                            teams[game_name][team] = max(teams[game_name][team], team_score)
-                            save_teams()
-                    continue
-
                 if data.get("type") == "user":
                     action = data.get("action")
-                    print(f"\n[USER] {data}")
+
+                    if action == "score":
+                        player = client_state.get("username") or ""
+                        game_name = data.get("game", "")
+                        individual_score = data.get("individual_score", 0)
+                        team = data.get("team", "")
+                        team_score = data.get("team_score", 0)
+                        game_time = data.get("game_time", 0)
+
+                        # Only process scores for games that support resonance
+                        if game_name in GAMES_LIBRARY and GAMES_LIBRARY[game_name].get("resonance"):
+                            if player and game_name:
+                                session_entry = {
+                                    "username": player,
+                                    "game": game_name,
+                                    "individual_score": individual_score,
+                                    "team": team,
+                                    "team_score": team_score,
+                                    "game_time": game_time,
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                                append_session(session_entry)
+                        continue
 
                     if action == "login":
                         username = data.get("username", "").strip()
@@ -265,7 +264,6 @@ async def handle_client(client):
                                 "team": team,
                                 "chat_history": game_chats
                             }
-                            print(f"\n[INITIAL] {initial_payload}")
                             await client.send(json.dumps(initial_payload))
 
                         elif result == "new":
@@ -293,7 +291,6 @@ async def handle_client(client):
                                     "team": team,
                                     "chat_history": game_chats
                                 }
-                                print(f"\n[INITIAL] {initial_payload}")
                                 await client.send(json.dumps(initial_payload))
                         continue
 
@@ -307,7 +304,7 @@ async def handle_client(client):
                                 game_chats[game_name] = []
                             if game_name not in recent_chats:
                                 recent_chats[game_name] = []
-
+                            
                             chat_entry = {
                                 "sender": sender,
                                 "message": message,
@@ -335,11 +332,6 @@ async def handle_client(client):
 async def run_server():
     """Start the WebSocket server and periodically send status updates to clients."""
     server = await websockets.serve(handle_client, "127.0.0.1", server_port)
-    print(f"Python server running on ws://127.0.0.1:{server_port}")
-    print("Available games:")
-    for game_name, game_info in GAMES_LIBRARY.items():
-        print(f"  - {game_name} on port {game_info['port']} (path: {game_info['path']})")
-    
     asyncio.create_task(send_status())
     
     await asyncio.Future()
@@ -349,4 +341,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(run_server())
     except KeyboardInterrupt:
-        print("\nServer stopped.")
+        pass

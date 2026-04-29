@@ -21,9 +21,9 @@ class Level:
         self.target_tree = None  # Currently targeted tree for health bar
         self.main_tree = None  # The shared tree health object
 
-        # Score tracking - now per team
+        # Score tracking - all scores start fresh
         self.individual_score = 0
-        self.team_scores = {'blue': 0, 'pink': 0, 'green': 0, 'default': 0}  # Separate score for each team
+        self.team_scores = {'blue': 0, 'pink': 0, 'green': 0, 'default': 0}
         self.is_combo_active = False  # Flag for combo state
         self.last_attack_time = 0  # Track when player last attacked
         
@@ -105,7 +105,7 @@ class Level:
         status = self.player.status.replace("_idle", "").replace("_attack", "")
         tree_health = self.main_tree.health if self.main_tree else -1
         tree_regen_count = self.main_tree.regen_count if self.main_tree else 0
-        self.network.send_update(self.player.rect.x, self.player.rect.y, character_type, status, self.player.is_attacking, self.individual_score, self.team_scores[self.team], self.team, tree_health, tree_regen_count)
+        self.network.send_update(self.player.rect.x, self.player.rect.y, character_type, status, self.player.is_attacking, self.individual_score, 0, self.team, tree_health, tree_regen_count)
 
         # Get updates from server
         updates = self.network.get_updates()
@@ -136,7 +136,6 @@ class Level:
                     if 'is_attacking' in data:
                         other_player.is_attacking = data['is_attacking']
                     self.other_players[player_id] = other_player
-                    print(f"[DEBUG] Created remote player {player_id} as character on team {other_team}")
                 else:
                     other_player = self.other_players[player_id]
                     other_player.set_position(data['x'], data['y'])
@@ -150,12 +149,6 @@ class Level:
                         other_player.team = data['team']
                         other_player.image = other_player._load_base_sprite()
                         other_player.animations = other_player._build_static_animations()
-                
-                # Sync team scores - take the maximum from all players on each team
-                if 'team' in data and 'team_score' in data:
-                    player_team = data['team']
-                    if player_team in self.team_scores and data['team_score'] > self.team_scores[player_team]:
-                        self.team_scores[player_team] = data['team_score']
                 
                 # Sync tree health:
                 if 'tree_health' in data and data['tree_health'] >= 0 and self.main_tree:

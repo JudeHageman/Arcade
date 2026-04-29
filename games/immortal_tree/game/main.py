@@ -3,12 +3,11 @@ import sys
 import argparse
 from settings import *
 from level import Level
-from score_status import ScoreStatus
-
+from session import Session
 
 class Game:
     def __init__(self, player_name, team, server_host='localhost', server_port=8080, serializer='text'):
-        # general setup
+        # General setup
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGTH))
         
@@ -45,8 +44,8 @@ class Game:
             self.serializer
         )
 
-        # Start score status reporter thread
-        reporter = ScoreStatus(
+        # Create session tracker to send final session information when the game ends
+        session = Session(
             self.player_name,
             GAME_NAME,
             lambda: (
@@ -55,7 +54,6 @@ class Game:
                 self.team
             )
         )
-        reporter.start()
         
         # Game loop
         while self.running:
@@ -63,11 +61,13 @@ class Game:
             for event in pygame.event.get():
                 events.append(event)
                 if event.type == pygame.QUIT:
+                    session.print_session()
                     self.level.network.disconnect()
                     pygame.quit()
                     sys.exit()
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
+                        session.print_session()
                         self.level.network.disconnect()
                         pygame.quit()
                         sys.exit()
@@ -94,14 +94,6 @@ if __name__ == '__main__':
                        help='Team: blue, pink, green, or default (default)')
     
     args = parser.parse_args()
-    
-    print("="*50)
-    print(f"Starting game as '{args.name}'")
-    print(f"Team: {args.team.upper()}")
-    print(f"Connecting to {args.server}:{args.port}")
-    print(f"Using {args.serializer.upper()} serialization")
-    print("="*50)
-    print()
     
     game = Game(args.name, args.team, args.server, args.port, args.serializer)
     game.run()
