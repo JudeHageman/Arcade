@@ -96,4 +96,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     game = Game(args.name, args.team, args.server, args.port, args.serializer)
+    
     game.run()

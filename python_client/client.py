@@ -28,7 +28,7 @@ import threading
 import json
 
 # websocket connects to a URI, not just a port
-server_port = 8000
+server_port = 50085
 server_url = f"ws://127.0.0.1:{server_port}"
 
 # player name is assigned by the server after login
@@ -59,6 +59,8 @@ match_history_widget = None
 games_catalog_widget = None
 team_chat_widget = None
 team_widget = None
+pending_username = ""
+current_screen = "games"
 
 def change_screen(screen_name):
     """Switch between different screens."""
@@ -77,7 +79,6 @@ def change_screen(screen_name):
         games_widget.pack(fill=tk.BOTH, expand=True)
     elif screen_name == "profile" and profile_widget:
         profile_widget.pack(fill=tk.BOTH, expand=True)
-        send_query({"action": "query", "query": "profile"})
     elif screen_name == "leaderboards" and leaderboards_widget:
         leaderboards_widget.pack(fill=tk.BOTH, expand=True)
     elif screen_name == "player_search" and player_search_widget:
@@ -167,6 +168,7 @@ def send_team(team):
     if not ws or not ws_loop:
         return
     payload = json.dumps({
+        "type": "user",
         "action": "select_team",
         "team": team
     })
@@ -202,7 +204,7 @@ def logout():
 
 def send_login():
     """Send the username and password to the server for authentication."""
-    global ws, ws_loop
+    global ws, ws_loop, pending_username
 
     if not ws_connection or not ws or not ws_loop:
         return
@@ -212,7 +214,9 @@ def send_login():
 
     if not username or not password:
         return
+    pending_username = username
     payload = json.dumps({
+        "type": "user",
         "action": "login",
         "username": username,
         "password": password
@@ -277,6 +281,7 @@ async def persistent_connection():
                         window.after(0, update_games_ui)
                         continue
 
+<<<<<<< HEAD:py_client/client.py
                     if data.get("type") == "team_chat_update":
                         if not authenticated:
                             continue
@@ -308,6 +313,8 @@ async def persistent_connection():
                         window.after(0, lambda d=data.get("rows"): display_games_catalog(d))
                         continue
 
+=======
+>>>>>>> 58400efae7f884f59d874e44e2d6211ceff6dc65:python_client/client.py
                 except json.JSONDecodeError:
                     pass
 
@@ -382,6 +389,7 @@ def send_chat_message(game_name):
     
     try:
         payload = json.dumps({
+            "type": "user",
             "action": "chat",
             "game": game_name,
             "message": message.strip()
@@ -479,8 +487,8 @@ def create_game_ui(game_name, game_info):
     
     chat_display = tk.Text(
         game_container,
-        height=10,
-        width=40,
+        height=5,
+        width=50,
         state=tk.DISABLED,
         font=("Arial", 8),
         bg="white"
@@ -537,23 +545,29 @@ def update_game_status(game_name, game_info):
     status_label = game_buttons.get(game_name)["status_label"]
     status_label.config(text=f"Status: {display_status}")
 
-def _read_game_stdout(proc):
-    """Read stdout from the game process, forwarding user messages via the existing WebSocket."""
+def _read_game_stdout(self, process):
+    print("--- STDOUT THREAD STARTED ---")  # 스레드 시작 확인
     try:
-        for line in proc.stdout:
+        for line in process.stdout:
+            print(f"--- RAW LINE: {repr(line)} ---")  # 모든 줄 출력
             line = line.rstrip()
             if line.startswith("[USER] "):
                 try:
                     user_data = json.loads(line[len("[USER] "):])
-                    if ws and ws_loop and ws_connection and authenticated:
-                        asyncio.run_coroutine_threadsafe(ws.send(json.dumps(user_data)), ws_loop)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                    self.app.network.send_action(
+                        user_data.get("action", "score"),
+                        **{k: v for k, v in user_data.items() 
+                        if k not in ("type", "action")}
+                    )
+                    print(f"--- SCORE SENT: {user_data} ---")
+                except Exception as e:
+                    print(f"--- STDOUT PARSE ERROR: {e} ---")
+        print("--- STDOUT THREAD ENDED ---")  # 스레드 종료 확인
+    except Exception as e:
+        print(f"--- STDOUT READ ERROR: {e} ---")
 
 
-def _restore_game_button(game_process, game_name):
+def restore_game_button(game_process, game_name):
     """Restore a game button after its process closes."""
     global game_instance
     game_process.wait()
@@ -605,29 +619,29 @@ def run_game(game_name):
         if game_name in game_buttons:
             game_buttons.get(game_name)["button"].config(text="Close Game", command=lambda: close_game(game_name))
 
-        watch_thread = threading.Thread(target=_restore_game_button, args=(game_instance, game_name), daemon=True)
+        watch_thread = threading.Thread(target=restore_game_button, args=(game_instance, game_name), daemon=True)
         watch_thread.start()
         
     except Exception:
         pass
 
 def close_game(game_name):
-    """Close the currently running game process."""
     global game_instance, running_game_name
 
     if game_instance:
+        # 강제 종료 대신 SIGTERM 보내고 잠깐 기다리기
         game_instance.terminate()
+        try:
+            game_instance.wait(timeout=3)  # 3초 안에 print_session() 실행되길 기다림
+        except subprocess.TimeoutExpired:
+            game_instance.kill()  # 그래도 안 끝나면 강제 kill
         game_instance = None
         running_game_name = None
         if game_name in game_buttons:
-            game_buttons.get(game_name)["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
-
-def send_query(payload):
-    """Send a query request to the server."""
-    global ws, ws_loop
-    if not ws or not ws_loop or not ws_connection or not authenticated:
-        return
-    asyncio.run_coroutine_threadsafe(ws.send(json.dumps(payload)), ws_loop)
+            game_buttons.get(game_name)["button"].config(
+                text=f"Launch {game_name}", 
+                command=lambda: run_game(game_name)
+            )
 
 # create main window
 window = tk.Tk()
@@ -697,188 +711,24 @@ content_frame.pack(fill=tk.BOTH, expand=True)
 # games screen
 games_widget = tk.Frame(content_frame)
 
-# profile screen
+# ── PROFILE SCREEN ────────────────────────────────────────────────────────────
 profile_widget = tk.Frame(content_frame)
-profile_text = tk.Text(profile_widget, height=10, width=40, state=tk.DISABLED, font=("Arial", 9))
-profile_text.pack(padx=10, pady=6)
-
-def display_profile(data):
-    """Render a profile dict into the profile text box."""
-    profile_text.config(state=tk.NORMAL)
-    profile_text.delete(1.0, tk.END)
-    if not data:
-        profile_text.insert(tk.END, "No profile found.\n")
-    else:
-        profile_text.insert(tk.END, f"Username: {data.get('username', 'N/A')}\n")
-        profile_text.insert(tk.END, f"Team: {data.get('team', 'N/A')}\n")
-        profile_text.insert(tk.END, f"Total Games: {data.get('total_games', 0)}\n")
-        profile_text.insert(tk.END, f"Total Score: {data.get('total_score', 0)}\n")
-        profile_text.insert(tk.END, f"Best Score: {data.get('best_score', 0)}\n")
-        profile_text.insert(tk.END, f"Total Time: {data.get('total_time', 0)}s\n")
-        history = data.get("score_history", [])
-        if history:
-            profile_text.insert(tk.END, "\nRecent Scores:\n")
-            for entry in history[:10]:
-                profile_text.insert(tk.END, f"{entry.get('timestamp','')[:19]} {entry.get('game','')} {entry.get('score',0)}\n")
-    profile_text.config(state=tk.DISABLED)
 
 
-# leaderboards screen
+# ── LEADERBOARDS SCREEN ───────────────────────────────────────────────────────
 leaderboards_widget = tk.Frame(content_frame)
 
-lb_controls = tk.Frame(leaderboards_widget)
-lb_controls.pack(pady=2)
-tk.Label(lb_controls, text="Game:", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-lb_game_entry = tk.Entry(lb_controls, font=("Arial", 9), width=16)
-lb_game_entry.insert(0, "Immortal Tree")
-lb_game_entry.pack(side=tk.LEFT, padx=2)
-tk.Label(lb_controls, text="Mode:", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-lb_mode_var = tk.StringVar(value="best_score")
-for _val, _label in [("best_score", "Best Score"), ("total_score", "Total Score"), ("play_time", "Play Time")]:
-    tk.Radiobutton(lb_controls, text=_label, variable=lb_mode_var, value=_val, font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-tk.Button(lb_controls, text="Load", font=("Arial", 9),
-    command=lambda: send_query({"action": "query", "query": "leaderboard",
-        "game": lb_game_entry.get().strip(), "sort_by": lb_mode_var.get(), "top_n": 20})).pack(side=tk.LEFT, padx=6)
 
-lb_text = tk.Text(leaderboards_widget, height=10, width=40, state=tk.DISABLED, font=("Arial", 9))
-lb_text.pack(padx=10, pady=6)
-
-def display_leaderboard(data):
-    """Render leaderboard response into the leaderboard text box."""
-    lb_text.config(state=tk.NORMAL)
-    lb_text.delete(1.0, tk.END)
-    rows = data.get("rows", [])
-    own_rank = data.get("own_rank")
-    if own_rank:
-        lb_text.insert(tk.END, f"Your rank: #{own_rank}\n")
-    lb_text.insert(tk.END, "\n")
-    if not rows:
-        lb_text.insert(tk.END, "No data.\n")
-    else:
-        for i, row in enumerate(rows, 1):
-            lb_text.insert(tk.END, f"{i} {row.get('username','')} {row.get('score',0)}\n")
-    lb_text.config(state=tk.DISABLED)
-
-
-# player search screen
+# ── PLAYER SEARCH SCREEN ──────────────────────────────────────────────────────
 player_search_widget = tk.Frame(content_frame)
 
-ps_controls = tk.Frame(player_search_widget)
-ps_controls.pack(pady=2)
-tk.Label(ps_controls, text="Prefix:", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-ps_entry = tk.Entry(ps_controls, font=("Arial", 9), width=20)
-ps_entry.pack(side=tk.LEFT, padx=2)
-tk.Button(ps_controls, text="Search", font=("Arial", 9),
-    command=lambda: send_query({"action": "query", "query": "player_search",
-        "prefix": ps_entry.get().strip()})).pack(side=tk.LEFT, padx=6)
 
-ps_list = tk.Listbox(player_search_widget, font=("Arial", 9), height=10, width=40)
-ps_list.pack(padx=10, pady=4)
-
-ps_detail_text = tk.Text(player_search_widget, height=10, width=40, state=tk.DISABLED, font=("Arial", 9))
-ps_detail_text.pack(padx=10, pady=4)
-
-_ps_results = []
-
-def display_search_results(results):
-    """Populate the player search listbox with results."""
-    global _ps_results
-    _ps_results = results or []
-    ps_list.delete(0, tk.END)
-    for r in _ps_results:
-        ps_list.insert(tk.END, f"{r.get('username','')}  ({r.get('team','')})")
-
-def _on_ps_select(event):
-    """Load full profile for the selected player."""
-    sel = ps_list.curselection()
-    if not sel or not _ps_results:
-        return
-    idx = sel[0]
-    if idx < len(_ps_results):
-        username = _ps_results[idx].get("username", "")
-        send_query({"action": "query", "query": "player_profile", "username": username})
-
-ps_list.bind("<<ListboxSelect>>", _on_ps_select)
-
-def display_player_profile(data):
-    """Render a player profile in the player search detail area."""
-    ps_detail_text.config(state=tk.NORMAL)
-    ps_detail_text.delete(1.0, tk.END)
-    if not data:
-        ps_detail_text.insert(tk.END, "Player not found.\n")
-    else:
-        ps_detail_text.insert(tk.END, f"Username: {data.get('username','')}\n")
-        ps_detail_text.insert(tk.END, f"Team: {data.get('team','N/A')}\n")
-        ps_detail_text.insert(tk.END, f"Total Games: {data.get('total_games',0)}\n")
-        ps_detail_text.insert(tk.END, f"Total Score: {data.get('total_score',0)}\n")
-        ps_detail_text.insert(tk.END, f"Best Score: {data.get('best_score',0)}\n")
-    ps_detail_text.config(state=tk.DISABLED)
-
-
-# match history screen
+# ── MATCH HISTORY SCREEN ──────────────────────────────────────────────────────
 match_history_widget = tk.Frame(content_frame)
 
-mh_controls = tk.Frame(match_history_widget)
-mh_controls.pack(pady=2)
-tk.Label(mh_controls, text="Username:", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-mh_user_entry = tk.Entry(mh_controls, font=("Arial", 9), width=16)
-mh_user_entry.pack(side=tk.LEFT, padx=2)
-tk.Label(mh_controls, text="Game (opt):", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-mh_game_entry = tk.Entry(mh_controls, font=("Arial", 9), width=14)
-mh_game_entry.pack(side=tk.LEFT, padx=2)
 
-def _send_match_history():
-    """Read the match history filter fields and send the query to the server."""
-    username = mh_user_entry.get().strip() or player_name
-    game_filter = mh_game_entry.get().strip() or None
-    send_query({"action": "query", "query": "match_history",
-        "username": username, "game": game_filter})
-
-tk.Button(mh_controls, text="Load", font=("Arial", 9), command=_send_match_history).pack(side=tk.LEFT, padx=6)
-
-mh_text = tk.Text(match_history_widget, height=10, width=40, state=tk.DISABLED, font=("Arial", 9))
-mh_text.pack(padx=10, pady=6)
-
-def display_match_history(data):
-    """Render match history rows into the match history text box."""
-    mh_text.config(state=tk.NORMAL)
-    mh_text.delete(1.0, tk.END)
-    if not data:
-        mh_text.insert(tk.END, "No matches found.\n")
-    else:
-        for row in data:
-            mh_text.insert(tk.END,
-                f"{row.get('timestamp','')[:19]} {row.get('game','')} {row.get('individual_score',0)} {row.get('team_score',0)} {row.get('game_time',0)}s\n")
-    mh_text.config(state=tk.DISABLED)
-
-
-# games catalog screen
+# ── GAMES CATALOG SCREEN ──────────────────────────────────────────────────────
 games_catalog_widget = tk.Frame(content_frame)
-
-gc_controls = tk.Frame(games_catalog_widget)
-gc_controls.pack(pady=2)
-tk.Label(gc_controls, text="Sort by:", font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-gc_sort_var = tk.StringVar(value="most_played")
-for _val, _label in [("most_played", "Most Played"), ("highest_avg_score", "Highest Avg Score"), ("most_recently_active", "Most Recently Active")]:
-    tk.Radiobutton(gc_controls, text=_label, variable=gc_sort_var, value=_val, font=("Arial", 9)).pack(side=tk.LEFT, padx=2)
-tk.Button(gc_controls, text="Load", font=("Arial", 9),
-    command=lambda: send_query({"action": "query", "query": "games_catalog",
-        "sort_by": gc_sort_var.get()})).pack(side=tk.LEFT, padx=6)
-
-gc_text = tk.Text(games_catalog_widget, height=10, width=40, state=tk.DISABLED, font=("Arial", 9))
-gc_text.pack(padx=10, pady=6)
-
-def display_games_catalog(rows):
-    """Render games catalog rows into the catalog text box."""
-    gc_text.config(state=tk.NORMAL)
-    gc_text.delete(1.0, tk.END)
-    if not rows:
-        gc_text.insert(tk.END, "No games found.\n")
-    else:
-        for row in rows:
-            gc_text.insert(tk.END,
-                f"{row.get('name','')} {row.get('total_sessions',0)} {row.get('avg_score',0.0)} {row.get('last_played','')[:19]}\n")
-    gc_text.config(state=tk.DISABLED)
 
 
 # team chat screen
