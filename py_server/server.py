@@ -7,6 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
 
+# modules for query responses
+import games as games_module
+import leaderboards as leaderboards_module
+import profile as profile_module
+import match_history as match_history_module
+import player_search as player_search_module
+import memory
+
 # custom data structures for server state
 from hash_table import HashTable
 from dynamic_array import ArrayList
@@ -47,12 +55,11 @@ games_file = data_folder / "games.ndjson"
 
 # server state
 connected_clients = HashTable()
-current_games_status = HashTable()
 game_chats = HashTable()
 recent_chats = HashTable()
 accounts = HashTable()
 
-def load_games():
+def _load_games():
     """Load games from disk."""
     games = HashTable()
     if not games_file.exists():
@@ -73,9 +80,9 @@ def load_games():
         pass
     return games
 
-GAMES_LIBRARY = load_games()
+GAMES_LIBRARY = _load_games()
 
-def load_accounts():
+def _load_accounts():
     """Load saved accounts from disk."""
     accounts = HashTable()
     if not accounts_file.exists():
@@ -97,9 +104,9 @@ def load_accounts():
     return accounts
     
 # load accounts on server startup
-accounts = load_accounts()
+accounts = _load_accounts()
 
-def load_chats():
+def _load_chats():
     """Load persisted chat history from chats.ndjson into game_chats."""
     chats = HashTable()
     if not chats_file.exists():
@@ -137,7 +144,7 @@ def load_chats():
     return chats
 
 # load chat history on server startup
-game_chats = load_chats()
+game_chats = _load_chats()
 
 def _chats_to_dict(chats_ht):
     """Convert the chat HashTable to a plain dict for JSON serialization."""
@@ -150,7 +157,7 @@ def _chats_to_dict(chats_ht):
             result[game_name] = messages
     return result
 
-def append_account(username, account_data):
+def _append_account(username, account_data):
     """Append a new account record to accounts.ndjson."""
     try:
         with accounts_file.open("a", encoding="utf-8") as file_handle:
@@ -158,7 +165,7 @@ def append_account(username, account_data):
     except Exception:
         pass
 
-def append_session(entry):
+def _append_session(entry):
     """Append a session record to sessions.ndjson."""
     try:
         with sessions_file.open("a", encoding="utf-8") as f:
@@ -190,7 +197,7 @@ def create_account(username, password_hash, team="default"):
     """Persist a new account with its pre-hashed password and team."""
     account_data = {"password": password_hash, "team": team}
     accounts.put(username, account_data)
-    append_account(username, account_data)
+    _append_account(username, account_data)
 
 async def check_game_server(host, port):
     """Check if a game server is running on the given host and port."""
@@ -204,7 +211,7 @@ async def check_game_server(host, port):
 
 async def send_status():
     """Broadcast the current status of all games and chats to connected clients."""
-    global current_games_status, recent_chats
+    global recent_chats
 
     while True:
         try:
@@ -221,8 +228,6 @@ async def send_status():
                         "status": "connected" if connected else "disconnected",
                         "resonance": resonance
                     }
-
-            current_games_status = games_status
 
             authenticated_clients = 0
             for i in range(connected_clients.capacity):
@@ -287,109 +292,157 @@ async def handle_client(client):
                 except KeyError:
                     continue
 
-                if data.get("type") == "user":
-                    action = data.get("action")
+                action = data.get("action")
 
-                    if action == "score":
-                        player = client_state.get("username") or ""
-                        game_name = data.get("game", "")
-                        individual_score = data.get("individual_score", 0)
+                if action == "score":
+                    player = client_state.get("username") or ""
+                    game_name = data.get("game", "")
+                    individual_score = data.get("individual_score", 0)
+                    team = data.get("team", "")
+                    team_score = data.get("team_score", 0)
+                    game_time = data.get("game_time", 0)
+
+                    # only process scores for games that support resonance
+                    if game_name in GAMES_LIBRARY and GAMES_LIBRARY.get(game_name).get("resonance"):
+                        if player and game_name:
+                            session_entry = {
+                                "username": player,
+                                "game": game_name,
+                                "individual_score": individual_score,
+                                "team": team,
+                                "team_score": team_score,
+                                "game_time": game_time,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            _append_session(session_entry)
+                    continue
+
+                if action == "login":
+                    username = data.get("username", "").strip()
+                    password = data.get("password", "")
+                    result = authenticate_account(username, password)
+
+                    if result == "existing":
+                        client_state["authenticated"] = True
+                        client_state["username"] = username
+                        team = accounts.get(username).get("team", "default")
+                        initial_payload = {
+                            "type": "initial",
+                            "username": username,
+                            "team": team,
+                            "chat_history": _chats_to_dict(game_chats)
+                        }
+                        await client.send(json.dumps(initial_payload))
+
+                    elif result == "new":
+                        password_hash = hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
+                        client_state["pending_username"] = username
+                        client_state["pending_hash"] = password_hash
+                        await client.send(json.dumps({"type": "select_team"}))
+                    continue
+
+                if not client_state.get("authenticated"):
+                    if action == "select_team":
+                        pending_username = client_state.get("pending_username")
+                        pending_hash = client_state.get("pending_hash")
                         team = data.get("team", "")
-                        team_score = data.get("team_score", 0)
-                        game_time = data.get("game_time", 0)
 
-                        # Only process scores for games that support resonance
-                        if game_name in GAMES_LIBRARY and GAMES_LIBRARY.get(game_name).get("resonance"):
-                            if player and game_name:
-                                session_entry = {
-                                    "username": player,
-                                    "game": game_name,
-                                    "individual_score": individual_score,
-                                    "team": team,
-                                    "team_score": team_score,
-                                    "game_time": game_time,
-                                    "timestamp": datetime.now().isoformat()
-                                }
-                                append_session(session_entry)
-                        continue
-
-                    if action == "login":
-                        username = data.get("username", "").strip()
-                        password = data.get("password", "")
-                        result = authenticate_account(username, password)
-
-                        if result == "existing":
+                        if pending_username and pending_hash and team:
+                            create_account(pending_username, pending_hash, team)
                             client_state["authenticated"] = True
-                            client_state["username"] = username
-                            team = accounts.get(username).get("team", "default")
+                            client_state["username"] = pending_username
+                            client_state["pending_username"] = None
+                            client_state["pending_hash"] = None
                             initial_payload = {
                                 "type": "initial",
-                                "username": username,
+                                "username": pending_username,
                                 "team": team,
                                 "chat_history": _chats_to_dict(game_chats)
                             }
                             await client.send(json.dumps(initial_payload))
+                    continue
 
-                        elif result == "new":
-                            password_hash = hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
-                            client_state["pending_username"] = username
-                            client_state["pending_hash"] = password_hash
-                            await client.send(json.dumps({"type": "select_team"}))
-                        continue
+                if action == "query":
+                    query_type = data.get("query")
+                    username = client_state.get("username") or ""
 
-                    if not client_state.get("authenticated"):
-                        if action == "select_team":
-                            pending_username = client_state.get("pending_username")
-                            pending_hash = client_state.get("pending_hash")
-                            team = data.get("team", "")
+                    memory.refresh()
+                    profile_module.refresh()
+                    leaderboards_module.refresh()
+                    match_history_module.refresh()
+                    player_search_module.refresh()
+                    games_module.refresh()
 
-                            if pending_username and pending_hash and team:
-                                create_account(pending_username, pending_hash, team)
-                                client_state["authenticated"] = True
-                                client_state["username"] = pending_username
-                                client_state["pending_username"] = None
-                                client_state["pending_hash"] = None
-                                initial_payload = {
-                                    "type": "initial",
-                                    "username": pending_username,
-                                    "team": team,
-                                    "chat_history": _chats_to_dict(game_chats)
-                                }
-                                await client.send(json.dumps(initial_payload))
-                        continue
+                    if query_type == "profile":
+                        target = data.get("username", username)
+                        result = profile_module.get_profile(target)
+                        await client.send(json.dumps({"type": "profile", "data": result}))
 
-                    if action == "chat":
-                        game_name = data.get("game")
-                        message = data.get("message", "").strip()
-                        sender = client_state.get("username") or "Unknown"
+                    elif query_type == "leaderboard":
+                        game_name = data.get("game", "")
+                        sort_by = data.get("sort_by", "best_score")
+                        top_n = data.get("top_n", 10)
+                        rows = leaderboards_module.get_leaderboard(game_name, top_n=top_n, sort_by=sort_by)
+                        rank = leaderboards_module.get_own_rank(game_name, username, sort_by=sort_by)
+                        await client.send(json.dumps({"type": "leaderboard", "game": game_name, "sort_by": sort_by, "rows": rows, "own_rank": rank}))
 
-                        if game_name and message:
-                            try:
-                                chat_list = game_chats.get(game_name)
-                            except KeyError:
-                                chat_list = ArrayList()
-                                game_chats.put(game_name, chat_list)
-                            try:
-                                recent_list = recent_chats.get(game_name)
-                            except KeyError:
-                                recent_list = ArrayList()
-                                recent_chats.put(game_name, recent_list)
+                    elif query_type == "match_history":
+                        target = data.get("username", username)
+                        game_filter = data.get("game", None)
+                        date_from = data.get("date_from", None)
+                        date_to = data.get("date_to", None)
+                        rows = match_history_module.get_match_history(target, game=game_filter, date_from=date_from, date_to=date_to)
+                        await client.send(json.dumps({"type": "match_history", "data": rows}))
 
-                            chat_entry = {
-                                "sender": sender,
-                                "message": message,
-                                "timestamp": datetime.now().isoformat()
-                            }
-                            chat_list.append(chat_entry)
-                            recent_list.append(chat_entry)
-                            if len(chat_list) > 50:
-                                chat_list.pop(0)
+                    elif query_type == "player_search":
+                        prefix = data.get("prefix", "")
+                        results = player_search_module.search_players(prefix) if prefix else []
+                        await client.send(json.dumps({"type": "player_search", "results": results}))
 
-                            try:
-                                with chats_file.open("a", encoding="utf-8") as f:
-                                    f.write(json.dumps({"game": game_name, **chat_entry}) + "\n")
-                            except Exception:
-                                pass
+                    elif query_type == "player_profile":
+                        target = data.get("username", "")
+                        result = player_search_module.get_player(target)
+                        await client.send(json.dumps({"type": "player_profile", "data": result}))
+
+                    elif query_type == "games_catalog":
+                        sort_by = data.get("sort_by", "most_played")
+                        rows = games_module.get_all_games_sorted(sort_by)
+                        await client.send(json.dumps({"type": "games_catalog", "rows": rows}))
+
+                    continue
+
+                if action == "chat":
+                    game_name = data.get("game")
+                    message = data.get("message", "").strip()
+                    sender = client_state.get("username") or "Unknown"
+
+                    if game_name and message:
+                        try:
+                            chat_list = game_chats.get(game_name)
+                        except KeyError:
+                            chat_list = ArrayList()
+                            game_chats.put(game_name, chat_list)
+                        try:
+                            recent_list = recent_chats.get(game_name)
+                        except KeyError:
+                            recent_list = ArrayList()
+                            recent_chats.put(game_name, recent_list)
+
+                        chat_entry = {
+                            "sender": sender,
+                            "message": message,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        chat_list.append(chat_entry)
+                        recent_list.append(chat_entry)
+                        if len(chat_list) > 50:
+                            chat_list.pop(0)
+
+                        try:
+                            with chats_file.open("a", encoding="utf-8") as f:
+                                f.write(json.dumps({"game": game_name, **chat_entry}) + "\n")
+                        except Exception:
+                            pass
 
             except json.JSONDecodeError:
                 pass

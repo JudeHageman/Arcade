@@ -3,12 +3,16 @@ from pathlib import Path
 
 # Add data_structures to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "algorithms" / "sorting"))
 
 # dynamic array used for ordered leaderboard output
 from dynamic_array import ArrayList
 
 # bst keeps each leaderboard sorted by score
 from bst import BST
+
+# mergesort used for score-range result ordering
+from merge_sort import mergesort
 
 # custom hash table for leaderboard state
 from hash_table import HashTable
@@ -20,7 +24,7 @@ import memory
 _trees = HashTable()
 _raw = HashTable()
 
-MODES = ("best_score", "total_score", "win_rate", "play_time")
+MODES = ("best_score", "total_score", "play_time")
 
 class LeaderboardEntry:
     """Store one leaderboard row for BST ordering."""
@@ -59,7 +63,6 @@ for session in memory.sessions:
         stats.put("best_score", 0)
         stats.put("total_score", 0)
         stats.put("play_time", 0)
-        stats.put("wins", 0)
         stats.put("games", 0)
         game_raw.put(username, stats)
         is_new = True
@@ -73,11 +76,9 @@ for session in memory.sessions:
         _trees.put(game, game_trees)
 
     if not is_new:
-        win_rate = round(stats.get("wins") / stats.get("games"), 4)
         game_trees.get("best_score").delete(LeaderboardEntry(stats.get("best_score"), username))
         game_trees.get("total_score").delete(LeaderboardEntry(stats.get("total_score"), username))
         game_trees.get("play_time").delete(LeaderboardEntry(stats.get("play_time"), username))
-        game_trees.get("win_rate").delete(LeaderboardEntry(win_rate, username))
 
     score = session.get("individual_score", 0)
     play_time = session.get("game_time", 0)
@@ -85,23 +86,17 @@ for session in memory.sessions:
     total_score = stats.get("total_score") + score
     total_play_time = stats.get("play_time") + play_time
     games_played = stats.get("games") + 1
-    wins = stats.get("wins")
 
     stats.put("total_score", total_score)
     stats.put("play_time", total_play_time)
     stats.put("games", games_played)
-    if score > 0:
-        wins += 1
-        stats.put("wins", wins)
     if score > best_score:
         best_score = score
         stats.put("best_score", best_score)
 
-    win_rate = round(stats.get("wins") / stats.get("games"), 4)
     game_trees.get("best_score").insert(LeaderboardEntry(best_score, username))
     game_trees.get("total_score").insert(LeaderboardEntry(total_score, username))
     game_trees.get("play_time").insert(LeaderboardEntry(total_play_time, username))
-    game_trees.get("win_rate").insert(LeaderboardEntry(win_rate, username))
 
 
 def get_leaderboard(game_name, top_n=10, sort_by="best_score"):
@@ -185,7 +180,7 @@ def get_players_in_score_range(game_name, low, high, sort_by="best_score"):
     output = []
     for entry in results:
         output.append({"username": entry.get("username"), "score": entry.get("score")})
-    return sorted(output, key=lambda x: x["score"], reverse=True)
+    return mergesort(output, key=lambda x: x["score"], reverse=True)
 
 def get_all_games():
     """Return the list of games currently present in the leaderboard store."""
@@ -223,7 +218,6 @@ def refresh():
             stats.put("best_score", 0)
             stats.put("total_score", 0)
             stats.put("play_time", 0)
-            stats.put("wins", 0)
             stats.put("games", 0)
             game_raw.put(username, stats)
             is_new = True
@@ -237,11 +231,9 @@ def refresh():
             _trees.put(game, game_trees)
 
         if not is_new:
-            win_rate = round(stats.get("wins") / stats.get("games"), 4)
             game_trees.get("best_score").delete(LeaderboardEntry(stats.get("best_score"), username))
             game_trees.get("total_score").delete(LeaderboardEntry(stats.get("total_score"), username))
             game_trees.get("play_time").delete(LeaderboardEntry(stats.get("play_time"), username))
-            game_trees.get("win_rate").delete(LeaderboardEntry(win_rate, username))
 
         score = session.get("individual_score", 0)
         play_time = session.get("game_time", 0)
@@ -249,22 +241,16 @@ def refresh():
         total_score = stats.get("total_score") + score
         total_play_time = stats.get("play_time") + play_time
         games_played = stats.get("games") + 1
-        wins = stats.get("wins")
 
         stats.put("total_score", total_score)
         stats.put("play_time", total_play_time)
         stats.put("games", games_played)
-        if score > 0:
-            wins += 1
-            stats.put("wins", wins)
         if score > best_score:
             best_score = score
             stats.put("best_score", best_score)
 
-        win_rate = round(stats.get("wins") / stats.get("games"), 4)
         game_trees.get("best_score").insert(LeaderboardEntry(best_score, username))
         game_trees.get("total_score").insert(LeaderboardEntry(total_score, username))
         game_trees.get("play_time").insert(LeaderboardEntry(total_play_time, username))
-        game_trees.get("win_rate").insert(LeaderboardEntry(win_rate, username))
 
 
