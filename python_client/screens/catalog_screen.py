@@ -23,8 +23,8 @@ class CatalogScreen(BaseScreen):
 
          
         self.game_data = [
-            {"name": "LUMBERJACK", "path": "../../games/game_1/game/main.py", "desc": "Fast-paced chopping action"},
-            {"name": "NEON BEAT", "path": "../../games/game_2/main.py", "desc": "Rhythm and lights"},
+            {"name": "LUMBERJACK", "path": "../../games/immortal_tree/game/main.py", "desc": " "},
+            {"name": "ISLAND", "path": "../../games/island/game/game/main.py", "desc": " "},
             {"name": "MELODY DASH", "path": "../../games/game_3/main.py", "desc": "Music platformer"}
         ]
 

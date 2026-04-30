@@ -1,7 +1,7 @@
 # client/arcade_app.py
 import pygame
 import sys
-
+LOGIN_SUCCESS = pygame.USEREVENT + 1
 from screens.login_screen import LoginScreen
 from screens.menu_screen import MenuScreen
 from screens.leaderboard_screen import LeaderboardScreen
@@ -9,8 +9,8 @@ from screens.profile_screen import ProfileScreen
 from Trie import PlayerTrie
 from screens.catalog_screen import CatalogScreen
 from screens.in_game_chat_screen import InGameChatScreen
-
- 
+from network_manager import NetworkManager
+from chat_moderation import ChatModerator
 
 class ArcadeApp:
     def __init__(self):
@@ -22,7 +22,8 @@ class ArcadeApp:
         pygame.display.set_caption("Team Resonance - Game Hub")
         self.clock = pygame.time.Clock()
         
-        
+        self.network = NetworkManager(self, port=50085)
+        self.network.start_connection()
         
         # 공통 자원 관리 (나중에 여기에 Network, Trie 인스턴스 추가)
         self.shared_data = {}
@@ -41,7 +42,7 @@ class ArcadeApp:
             "CHAT": InGameChatScreen(self)
              
         }
-        
+        self.moderator = ChatModerator()
         # 시작 화면 설정
         self.switch_screen("LOGIN")
 
@@ -71,19 +72,31 @@ class ArcadeApp:
 
     def run(self):
         """메인 루프: 이벤트 -> 업데이트 -> 그리기"""
+        
         while self.running:
             events = pygame.event.get()
             for event in events:
+                # 1. 시스템 종료 이벤트
                 if event.type == pygame.QUIT:
                     self.running = False
-            
+                
+                # 2. 네트워크 성공 이벤트 (메인 스레드에서 안전하게 화면 전환)
+                elif event.type == LOGIN_SUCCESS:
+                    print("--- APP DEBUG: Login Success Event Received. Switching to MENU ---")
+                    self.switch_screen("MENU")
+
+            # 3. 현재 화면 업데이트 및 그리기
             if self.current_screen:
+                # handle_events에 events 리스트 전체를 넘겨줍니다.
                 self.current_screen.handle_events(events)
                 self.current_screen.update()
                 self.current_screen.draw(self.screen)
             
+            # 4. 화면 업데이트 및 프레임 고정
             pygame.display.flip()
-            self.clock.tick(60) # 60 FPS 고정
+            self.clock.tick(60)
 
         pygame.quit()
         sys.exit()
+
+   

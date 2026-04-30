@@ -82,15 +82,7 @@ class InGameChatScreen(BaseScreen):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 self.process_chat_send()
 
-    def process_chat_send(self):
-         
-        if self.global_input.active and self.global_input.text.strip():
-            self.global_messages.append({"user": "Me", "text": self.global_input.text.strip()})
-            self.global_input.text = ""
-        elif self.team_input.active and self.team_input.text.strip():
-            self.team_messages.append({"user": "Me", "text": self.team_input.text.strip()})
-            self.team_input.text = ""
-
+    
     def handle_quit(self):
          
          
@@ -135,25 +127,27 @@ class InGameChatScreen(BaseScreen):
         pygame.draw.line(screen, color, (x + r - 2, y - 28*s), (x + r + 10*s, y - 18*s), int(3*s))
 
     def draw_chat_box(self, screen, rect, title, messages, color):
-         
+        """채팅 박스와 메시지를 화면에 그림"""
         s = self.scale
-         
         if rect.height < 10: return
+        
+        # 배경 및 테두리
         pygame.draw.rect(screen, self.colors["white"], rect, border_radius=int(10*s))
         pygame.draw.rect(screen, color, rect, 2, border_radius=int(10*s))
         
-         
+        # 타이틀 레이블
         lbl = self.font_label.render(title, True, color)
         screen.blit(lbl, (rect.x + 5, rect.y - int(22*s)))
 
-         
-        max_msgs = max(rect.height // 22, 1)
+        # 메시지 렌더링 (폰트 높이에 맞춰 동적 간격 조절)
+        line_height = self.font_msg.get_linesize()
+        max_msgs = max(rect.height // line_height, 1)
         y_off = rect.y + 10
+        
         for msg in messages[-int(max_msgs):]:
             txt = self.font_msg.render(f"{msg['user']}: {msg['text']}", True, self.colors["black"])
             screen.blit(txt, (rect.x + 12, y_off))
-            y_off += int(20 * s)
-
+            y_off += line_height
     def update(self): pass
 
     def draw(self, screen):
@@ -177,3 +171,58 @@ class InGameChatScreen(BaseScreen):
         self.team_input.draw(screen)
 
         self.quit_btn.draw(screen)
+
+    def load_history(self, history):
+        """로그인 시 서버에서 받은 과거 채팅 기록을 UI에 로드"""
+        # history는 {'GameName': [{'sender': '...', 'message': '...'}, ...]} 구조
+        # 여기서는 편의상 모든 게임의 기록을 GLOBAL에 합치거나 특정 게임만 필터링해서 보여줌
+        self.global_messages = []
+        for game_name, msgs in history.items():
+            for m in msgs:
+                self.global_messages.append({"user": m['sender'], "text": m['message']})
+        print(f"--- UI DEBUG: Loaded {len(self.global_messages)} historical messages ---")
+
+    def append_message(self, chat_type, user, text):
+        """실시간으로 들어오는 메시지를 리스트에 추가"""
+        new_msg = {"user": user, "text": text}
+        if chat_type == "global":
+            self.global_messages.append(new_msg)
+        else:
+            self.team_messages.append(new_msg)
+            
+        # 메시지가 너무 많으면 위에서부터 지워줌 (성능 최적화)
+        if len(self.global_messages) > 100: self.global_messages.pop(0)
+
+    def process_chat_send(self):
+        """채팅 입력 후 엔터 쳤을 때 서버로 전송 (모더레이터 검사 포함)"""
+        # 1. 글로벌 채팅 전송
+        if self.global_input.active and self.global_input.text.strip():
+            msg = self.global_input.text.strip()
+            is_valid, reason = self.app.moderator.validate_message(self.app.shared_data["username"], msg)
+            
+            if is_valid:
+                self.app.network.send_action("chat", game="Immortal Tree", message=msg)
+                self.global_input.text = ""
+            else:
+                self.global_messages.append({"user": "System", "text": f"Blocked: {reason}"})
+
+        # 2. 팀 채팅 전송
+        elif self.team_input.active and self.team_input.text.strip():
+            msg = self.team_input.text.strip()
+            # 팀 채팅은 별도의 채널로 전송 (서버 로직에 따라 수정 가능)
+            self.app.network.send_action("chat", game="TeamChannel", message=msg)
+            self.team_input.text = ""
+
+
+    def append_message(self, chat_type, user, text):
+        """NetworkManager가 호출하여 새 메시지를 UI 리스트에 추가"""
+        new_msg = {"user": user, "text": text}
+        
+        if chat_type == "global":
+            self.global_messages.append(new_msg)
+            if len(self.global_messages) > 100: self.global_messages.pop(0)
+        else:
+            self.team_messages.append(new_msg)
+            if len(self.team_messages) > 100: self.team_messages.pop(0)
+            
+        print(f"--- UI DEBUG: Message added to {chat_type} ({user}) ---")

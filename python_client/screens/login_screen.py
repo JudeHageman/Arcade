@@ -3,6 +3,7 @@ import math
 from screens.base_screen import BaseScreen
 from ui.button import Button
 from ui.input_box import InputBox
+from .utils import hash_password
 
 class LoginScreen(BaseScreen):
     def __init__(self, app):
@@ -31,7 +32,9 @@ class LoginScreen(BaseScreen):
         self.btn_pink = Button(cx - 50, btn_y, 100, 45, "PINK", color=self.colors["pink"], action=lambda: self.set_faction("pink"))
         self.btn_green = Button(cx + 55, btn_y, 100, 45, "GREEN", color=self.colors["green"], action=lambda: self.set_faction("green"))
 
-        self.start_btn = Button(cx - 150, cy + 130, 300, 55, "START RESONANCE", color=self.colors["staff"], action=self.handle_start)
+        self.start_btn = Button(cx - 150, cy + 130, 300, 55, "START RESONANCE", 
+                        color=self.colors["staff"], 
+                        action=self.handle_login) # handle_start 대신 handle_login 연결!
 
         self.font_title = pygame.font.SysFont("Source Sans 3, Arial", 72, bold=True)
         self.font_label = pygame.font.SysFont("Source Sans 3, Arial", 18, bold=True)
@@ -47,7 +50,7 @@ class LoginScreen(BaseScreen):
         self.app.shared_data["faction"] = self.selected_faction
         if not self.app.player_trie.search(username):
             self.app.player_trie.insert(username)
-        self.app.switch_screen("MENU")
+         
 
     def draw_music_note(self, screen, pos, color):
          
@@ -137,3 +140,22 @@ class LoginScreen(BaseScreen):
             self.btn_pink.handle_event(event)
             self.btn_green.handle_event(event)
             self.start_btn.handle_event(event)
+
+    def handle_login(self):
+        print("--- UI DEBUG: Login Button Pressed! ---")
+        username = self.user_box.text.strip()
+        password = self.pass_box.text.strip()
+        
+        if username and password:
+            # 선택한 진영 정보를 shared_data에 일단 저장
+            self.app.shared_data["faction"] = self.selected_faction
+            
+            hashed_pw = hash_password(password)
+            print(f"--- UI DEBUG: Sending Login Action ({username}) ---")
+            
+            # 서버로 로그인 요청 전송
+            self.app.network.send_action("login", username=username, password=hashed_pw)
+        else:
+            print("--- UI DEBUG: Missing ID or Password ---")
+
+            

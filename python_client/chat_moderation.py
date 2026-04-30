@@ -16,9 +16,9 @@ class ChatModerator:
         self.last_msg_time = {} 
         
         # Time interval required between messages to prevent spamming
-        self.rate_limit_seconds = 2 
+        self.rate_limit_seconds = 0.5
         
-        # Set of usernames that are currently restricted from chatting
+        # Set of usernames that are currently re stricted from chatting
         self.muted_users = set()
 
     def is_rate_limited(self, username):
