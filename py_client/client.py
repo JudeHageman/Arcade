@@ -9,6 +9,11 @@ import sys
 
 # used to find the game paths relative to the client script
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
+
+# custom hash table for client state management
+from hash_table import HashTable
 
 # used for the async server checks
 import asyncio
@@ -35,19 +40,51 @@ ws = None
 ws_connection = False
 ws_loop = None
 authenticated = False
-games_data = {}
-loaded_games = {}
+games_data = HashTable()
+loaded_games = HashTable()
 game_instance = None
 running_game_name = None
-game_buttons = {}
+game_buttons = HashTable()
 username_entry = None
 password_entry = None
-chat_widgets = {}
+chat_widgets = HashTable()
 login_widget = None
 main_widget = None
+navigation_frame = None
 games_widget = None
+profile_widget = None
+leaderboards_widget = None
+player_search_widget = None
+match_history_widget = None
+games_catalog_widget = None
 team_widget = None
 pending_username = ""
+current_screen = "games"
+
+def change_screen(screen_name):
+    """Switch between different screens."""
+    global current_screen
+    current_screen = screen_name
+    
+    # hide all screens
+    for w in (games_widget, profile_widget, leaderboards_widget,
+              player_search_widget, match_history_widget, games_catalog_widget):
+        if w:
+            w.pack_forget()
+    
+    # show the selected screen
+    if screen_name == "games" and games_widget:
+        games_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "profile" and profile_widget:
+        profile_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "leaderboards" and leaderboards_widget:
+        leaderboards_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "player_search" and player_search_widget:
+        player_search_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "match_history" and match_history_widget:
+        match_history_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "games_catalog" and games_catalog_widget:
+        games_catalog_widget.pack(fill=tk.BOTH, expand=True)
 
 def change_view(view):
     """Switch the client between disconnected, login, and games views."""
@@ -60,8 +97,8 @@ def change_view(view):
             player_label.config(text="Player: N/A")
         if 'team_label' in globals():
             team_label.config(text="Team: N/A")
-        if 'logout_button' in globals():
-            logout_button.pack_forget()
+        if 'navigation_frame' in globals() and navigation_frame:
+            navigation_frame.pack_forget()
         window.title("Resonance - N/A")
         if login_widget:
             login_widget.pack_forget()
@@ -74,6 +111,8 @@ def change_view(view):
     if view == "login":
         if main_widget:
             main_widget.pack_forget()
+        if 'navigation_frame' in globals() and navigation_frame:
+            navigation_frame.pack_forget()
         if login_widget:
             login_widget.pack(pady=10)
 
@@ -89,15 +128,18 @@ def change_view(view):
     if view == "games":
         if login_widget:
             login_widget.pack_forget()
+        if 'navigation_frame' in globals() and navigation_frame:
+            navigation_frame.pack(fill=tk.X, padx=5, pady=5)
         if main_widget:
             main_widget.pack(fill=tk.BOTH, expand=True)
+        change_screen("games")
 
 def clear_game_state():
     """Clear all game and chat state from the client UI and memory."""
     global games_data, loaded_games
 
-    games_data = {}
-    loaded_games = {}
+    games_data = HashTable()
+    loaded_games = HashTable()
     game_buttons.clear()
     chat_widgets.clear()
 
@@ -130,6 +172,7 @@ def send_team(team):
     hide_team_select()
 
 
+
 def change_username(username, team="default"):
     """Update the displayed username and team after a successful login."""
     global player_name, authenticated
@@ -147,7 +190,6 @@ def change_username(username, team="default"):
         password_entry.config(state=tk.DISABLED)
     if login_button:
         login_button.config(state=tk.DISABLED)
-    logout_button.pack(pady=(2, 0))
     change_view("games")
 
 def logout():
@@ -205,7 +247,12 @@ async def persistent_connection():
                         player_team = data.get("team", "default")
                         chat_history = data.get("chat_history", {})
                         for game_name, messages in chat_history.items():
-                            games_data.setdefault(game_name, {})["chat_history"] = messages
+                            try:
+                                entry = games_data.get(game_name)
+                            except KeyError:
+                                entry = {}
+                                games_data.put(game_name, entry)
+                            entry["chat_history"] = messages
                         window.after(0, lambda u=username, t=player_team: change_username(u, t))
                         continue
 
@@ -214,12 +261,20 @@ async def persistent_connection():
                             continue
                         for game_name, game_info in data.get("games", {}).items():
                             if game_name not in games_data:
-                                games_data[game_name] = {}
-                            games_data[game_name].update(game_info)
+                                games_data.put(game_name, {})
+                            games_data.get(game_name).update(game_info)
                         for game_name, messages in data.get("recent_chats", {}).items():
-                            games_data.setdefault(game_name, {}).setdefault("chat_history", []).extend(messages)
+                            try:
+                                entry = games_data.get(game_name)
+                            except KeyError:
+                                entry = {}
+                                games_data.put(game_name, entry)
+                            if "chat_history" not in entry:
+                                entry["chat_history"] = []
+                            entry["chat_history"].extend(messages)
                         window.after(0, update_games_ui)
-                        
+                        continue
+
                 except json.JSONDecodeError:
                     pass
 
@@ -253,8 +308,8 @@ def add_chat_message(game_name, sender, message):
     """Add a new chat message to the chat display for a specific game."""
     if game_name not in chat_widgets:
         return
-    
-    chat_display = chat_widgets[game_name].get("display")
+
+    chat_display = chat_widgets.get(game_name).get("display")
     if chat_display:
         chat_display.config(state=tk.NORMAL)
         chat_display.insert(tk.END, f"{sender}: {message}\n")
@@ -265,8 +320,8 @@ def display_chat_history(game_name, messages):
     """Display the chat history for a specific game in the chat display."""
     if game_name not in chat_widgets:
         return
-    
-    chat_display = chat_widgets[game_name].get("display")
+
+    chat_display = chat_widgets.get(game_name).get("display")
     if chat_display:
         chat_display.config(state=tk.NORMAL)
         chat_display.delete(1.0, tk.END)
@@ -283,8 +338,8 @@ def send_chat_message(game_name):
     
     if game_name not in chat_widgets:
         return
-    
-    chat_input = chat_widgets[game_name].get("input")
+
+    chat_input = chat_widgets.get(game_name).get("input")
     if not chat_input:
         return
     
@@ -312,38 +367,50 @@ def update_games_ui():
     if not ws_connection or not authenticated:
         return
 
-    current_game_names = set(games_data.keys())
-    loaded_game_names = set(loaded_games.keys())
-    
-    if not games_data:
-        if game_buttons:
+    if games_data.size == 0:
+        if game_buttons.size > 0:
             for widget in games_widget.winfo_children():
                 widget.destroy()
             game_buttons.clear()
             chat_widgets.clear()
             label = tk.Label(games_widget, text="No games available", font=("Arial", 10))
             label.pack(pady=20)
-            loaded_games = {}
+            loaded_games = HashTable()
         return
-    
-    if current_game_names != loaded_game_names:
+
+    same_games = (games_data.size == loaded_games.size)
+    if same_games:
+        for i in range(games_data.capacity):
+            for name, _ in games_data.table[i]:
+                if name not in loaded_games:
+                    same_games = False
+                    break
+            if not same_games:
+                break
+
+    if not same_games:
         for widget in games_widget.winfo_children():
             widget.destroy()
         game_buttons.clear()
         chat_widgets.clear()
-        
+
         # create UI for each game
-        for game_name, game_info in games_data.items():
-            create_game_ui(game_name, game_info)
-        
-        loaded_games = games_data.copy()
+        for i in range(games_data.capacity):
+            for game_name, game_info in games_data.table[i]:
+                create_game_ui(game_name, game_info)
+
+        loaded_games = HashTable()
+        for i in range(games_data.capacity):
+            for name, info in games_data.table[i]:
+                loaded_games.put(name, info)
     else:
         # for games that are already loaded, just update their status and chat history
-        for game_name, game_info in games_data.items():
-            if game_name in game_buttons:
-                update_game_status(game_name, game_info)
-            if game_name in chat_widgets:
-                display_chat_history(game_name, game_info.get("chat_history", []))
+        for i in range(games_data.capacity):
+            for game_name, game_info in games_data.table[i]:
+                if game_name in game_buttons:
+                    update_game_status(game_name, game_info)
+                if game_name in chat_widgets:
+                    display_chat_history(game_name, game_info.get("chat_history", []))
 
 def create_game_ui(game_name, game_info):
     """Create the UI elements for a given game."""
@@ -373,10 +440,10 @@ def create_game_ui(game_name, game_info):
     )
     status_label.pack(pady=3)
     
-    game_buttons[game_name] = {
+    game_buttons.put(game_name, {
         "button": button,
         "status_label": status_label
-    }
+    })
     
     chat_display = tk.Text(
         game_container,
@@ -404,10 +471,10 @@ def create_game_ui(game_name, game_info):
     
     chat_input.bind('<Return>', lambda e, g=game_name: send_chat_message(g))
     
-    chat_widgets[game_name] = {
+    chat_widgets.put(game_name, {
         "display": chat_display,
         "input": chat_input
-    }
+    })
 
     history = game_info.get("chat_history", [])
     if history:
@@ -417,14 +484,14 @@ def update_game_status(game_name, game_info):
     """Update the status of a given game."""
     if game_name not in game_buttons:
         return
-    
+
     # determine display status based on game_info
     status = game_info.get("status", "unknown")
     display_status = "Disconnected" if status == "disconnected" else "Connected" if status == "connected" else "Unknown"
-    
+
     # update button state and text
-    button = game_buttons[game_name]["button"]
-    
+    button = game_buttons.get(game_name)["button"]
+
     # only update button text if game is not currently running
     if game_name != running_game_name:
         button.config(
@@ -433,9 +500,9 @@ def update_game_status(game_name, game_info):
         )
     else:
         button.config(state=tk.NORMAL)
-    
+
     # update status label
-    status_label = game_buttons[game_name]["status_label"]
+    status_label = game_buttons.get(game_name)["status_label"]
     status_label.config(text=f"Status: {display_status}")
 
 def _read_game_stdout(proc):
@@ -463,7 +530,7 @@ def restore_game_button(game_process, game_name):
     # Only restore the button if the game_instance hasn't been manually set to None (by user closing)
     if game_instance is not None and game_instance.pid == game_process.pid:
         if game_name in game_buttons:
-            game_buttons[game_name]["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
+            game_buttons.get(game_name)["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
 
 def run_game(game_name):
     """Run a game as a separate process."""
@@ -474,9 +541,9 @@ def run_game(game_name):
     
     if game_name not in games_data:
         return
-    
-    game_port = games_data[game_name].get("port")
-    game_path = games_data[game_name].get("path")
+
+    game_port = games_data.get(game_name).get("port")
+    game_path = games_data.get(game_name).get("path")
     
     if not game_path:
         return
@@ -490,7 +557,7 @@ def run_game(game_name):
         
         # build command with --team [color] only if game supports resonance
         cmd = [sys.executable, str(game_path_file), player_name, "--port", str(game_port)]
-        resonance = games_data[game_name].get("resonance", False)
+        resonance = games_data.get(game_name).get("resonance", False)
         if resonance:
             cmd.extend(["--team", player_team])
         
@@ -506,7 +573,7 @@ def run_game(game_name):
         threading.Thread(target=_read_game_stdout, args=(game_instance,), daemon=True).start()
 
         if game_name in game_buttons:
-            game_buttons[game_name]["button"].config(text="Close Game", command=lambda: close_game(game_name))
+            game_buttons.get(game_name)["button"].config(text="Close Game", command=lambda: close_game(game_name))
 
         watch_thread = threading.Thread(target=restore_game_button, args=(game_instance, game_name), daemon=True)
         watch_thread.start()
@@ -555,8 +622,6 @@ player_label.pack(pady=2)
 team_label = tk.Label(window, text="Team: N/A", font=("Arial", 9))
 team_label.pack(pady=0)
 
-# hidden by default, shown after login
-logout_button = tk.Button(window, text="Logout", font=("Arial", 9), command=logout)
 
 # team selection (shown only for new accounts, hidden by default)
 team_widget = tk.Frame(window)
@@ -572,11 +637,47 @@ for _team, _color in [("pink", "#ffb6c1"), ("green", "#b4eeb4"), ("blue", "#add8
         command=lambda t=_team: send_team(t)
     ).pack(side=tk.LEFT, padx=6)
 
-# create a centered frame for games
+# navigation frame with buttons for different screens (placed in header)
+navigation_frame = tk.Frame(window)
+button_frame = tk.Frame(navigation_frame)
+button_frame.pack(expand=True)
+tk.Button(button_frame, text="Games", font=("Arial", 9), command=lambda: change_screen("games")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Game Catalog", font=("Arial", 9), command=lambda: change_screen("games_catalog")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Leaderboards", font=("Arial", 9), command=lambda: change_screen("leaderboards")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Player Search", font=("Arial", 9), command=lambda: change_screen("player_search")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Match History", font=("Arial", 9), command=lambda: change_screen("match_history")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Profile", font=("Arial", 9), command=lambda: change_screen("profile")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Logout", font=("Arial", 9), command=logout).pack(side=tk.LEFT, padx=3)
+
+# create a centered frame for main content
 main_widget = tk.Frame(window)
 
-games_widget = tk.Frame(main_widget)
-games_widget.pack(expand=True, anchor="center")
+# content frame to hold all screens
+content_frame = tk.Frame(main_widget)
+content_frame.pack(fill=tk.BOTH, expand=True)
+
+# games screen
+games_widget = tk.Frame(content_frame)
+
+# ── PROFILE SCREEN ────────────────────────────────────────────────────────────
+profile_widget = tk.Frame(content_frame)
+
+
+# ── LEADERBOARDS SCREEN ───────────────────────────────────────────────────────
+leaderboards_widget = tk.Frame(content_frame)
+
+
+# ── PLAYER SEARCH SCREEN ──────────────────────────────────────────────────────
+player_search_widget = tk.Frame(content_frame)
+
+
+# ── MATCH HISTORY SCREEN ──────────────────────────────────────────────────────
+match_history_widget = tk.Frame(content_frame)
+
+
+# ── GAMES CATALOG SCREEN ──────────────────────────────────────────────────────
+games_catalog_widget = tk.Frame(content_frame)
+
 
 change_view("disconnected")
 
