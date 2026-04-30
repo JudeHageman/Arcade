@@ -272,12 +272,12 @@ def _append_account(username, account_data):
         pass
 
 def _append_session(entry):
+    """Append a session record to sessions.ndjson."""
     try:
-        # sessions_file 경로가 data/sessions.ndjson 을 정확히 가리키는지 확인!
         with sessions_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-    except Exception as e:
-        print(f"--- ❌ [FILE ERROR] 장부 쓰기 실패: {e} ---")
+    except Exception:
+        pass
 
 def authenticate_account(username, password):
     """Check login credentials without creating the account."""
@@ -315,73 +315,61 @@ async def check_game_server(host, port):
     except Exception:
         return False
 
-
 async def send_status():
-<<<<<<< HEAD
     """Broadcast the current status of all games and chats to connected clients."""
     global recent_chats, recent_team_chats
-=======
-    """모든 클라이언트에게 실시간 게임 상태, 채팅, 리더보드를 방송함"""
-    global recent_chats
->>>>>>> 58400efae7f884f59d874e44e2d6211ceff6dc65
 
     while True:
         try:
-            # 1. [가장 중요] 파일(sessions.ndjson)에서 새로운 점수 줄을 읽어오기
-            # 이게 없으면 새 아이디로 점수를 내도 서버는 옛날 데이터만 기억해!
-            memory.refresh()
-            leaderboards_module.refresh()
-            top_scores = leaderboards_module.get_leaderboard("Immortal Tree")
-            # 2. 게임 서버 상태 체크 (네 HashTable 구조 활용)
             games_status = {}
             for i in range(GAMES_LIBRARY.capacity):
                 for game_name, game_info in GAMES_LIBRARY.table[i]:
                     port = game_info["port"]
+                    path = game_info["path"]
+                    resonance = game_info.get("resonance", False)
                     connected = await check_game_server("127.0.0.1", port)
                     games_status[game_name] = {
                         "port": port,
-                        "path": game_info["path"],
+                        "path": path,
                         "status": "connected" if connected else "disconnected",
-                        "resonance": game_info.get("resonance", False)
+                        "resonance": resonance
                     }
 
-            # 3. 인증된 유저 수 계산 및 클라이언트 리스트 생성
-            auth_count = 0
-            clients_to_send = ArrayList() # 네가 만든 ArrayList 사용
+            authenticated_clients = 0
+            for i in range(connected_clients.capacity):
+                for _, state in connected_clients.table[i]:
+                    if state.get("authenticated"):
+                        authenticated_clients += 1
+
+            message = json.dumps({
+                "type": "global",
+                "clients": authenticated_clients,
+                "games": games_status,
+                "recent_chats": _chats_to_dict(recent_chats)
+            })
+
+            clients = ArrayList()
             for i in range(connected_clients.capacity):
                 for client, state in connected_clients.table[i]:
                     if state.get("authenticated"):
-                        auth_count += 1
-                        clients_to_send.append(client)
+                        clients.append(client)
 
-            # 4. 최신 리더보드 가져오기
-            # 게임 이름 "Immortal Tree"가 로그의 이름과 일치해야 함
-            top_scores = leaderboards_module.get_leaderboard("Immortal Tree", top_n=10)
+            if len(clients):
+                results = await asyncio.gather(
+                    *(clients[j].send(message) for j in range(len(clients))),
+                    return_exceptions=True
+                )
 
-            # 5. 전송할 메시지 구성 (JSON)
-            message = json.dumps({
-                "type": "global",
-                "clients": auth_count,
-                "games": games_status,
-                "recent_chats": _chats_to_dict(recent_chats),
-                "leaderboard": top_scores
-            })
-
-            # 6. 실제로 모든 유저에게 보내기 (비동기 처리)
-            if len(clients_to_send) > 0:
-                # 모든 유저에게 동시에 전송 시도
-                send_tasks = [clients_to_send[j].send(message) for j in range(len(clients_to_send))]
-                results = await asyncio.gather(*send_tasks, return_exceptions=True)
-
-                # 전송 중 에러(연결 끊김) 난 클라이언트 정리
-                for j in range(len(results)):
+                disconnected = ArrayList()
+                for j in range(len(clients)):
                     if isinstance(results[j], Exception):
-                        try:
-                            connected_clients.remove(clients_to_send[j])
-                        except KeyError:
-                            pass
+                        disconnected.append(clients[j])
+                for j in range(len(disconnected)):
+                    try:
+                        connected_clients.remove(disconnected[j])
+                    except KeyError:
+                        pass
 
-<<<<<<< HEAD
             # send each authenticated client their own team's recent messages
             for i in range(connected_clients.capacity):
                 for client, state in connected_clients.table[i]:
@@ -403,17 +391,13 @@ async def send_status():
                         except Exception:
                             pass
 
-=======
-            # 실시간 채팅 목록 비우기 및 2초 대기
->>>>>>> 58400efae7f884f59d874e44e2d6211ceff6dc65
             recent_chats = HashTable()
             recent_team_chats = HashTable()
             await asyncio.sleep(2)
             
-        except Exception as e:
-            print(f"--- BROADCAST ERROR: {e} ---")
+        except Exception:
             await asyncio.sleep(2)
-            
+
 async def handle_client(client):
     """Handle a new client connection and listen for messages from that client."""
     connected_clients.put(client, {"authenticated": False, "username": None, "pending_hash": None})
@@ -439,56 +423,36 @@ async def handle_client(client):
                 action = data.get("action")
 
                 if action == "score":
-                    player = client_state.get("username") or "Unknown"
+                    player = client_state.get("username") or ""
                     game_name = data.get("game", "")
-                    score = data.get("individual_score", 0)
+                    individual_score = data.get("individual_score", 0)
+                    team = data.get("team", "")
+                    team_score = data.get("team_score", 0)
+                    game_time = data.get("game_time", 0)
 
-                    # 1단계: 메시지 도착 확인
-                    print(f"--- [DEBUG 1] 점수 신호 도착: {player}님이 {game_name}에서 {score}점 획득!")
-
-                    # 2단계: HashTable에서 게임 찾기 (in 대신 get 사용)
-                    try:
-                        game_info = GAMES_LIBRARY.get(game_name)
-                        print(f"--- [DEBUG 2] 도서관에서 게임 정보 찾음: {game_name}")
-                    except KeyError:
-                        print(f"--- [DEBUG 2 ERROR] '{game_name}'은 도서관에 없는 이름이야! (대소문자 확인해봐)")
-                        continue
-
-                    # 3단계: Resonance 설정 확인
-                    if game_info and game_info.get("resonance"):
-                        print(f"--- [DEBUG 3] Resonance 게임 확인 완료. 장부에 적기 시작!")
-                        
-                        session_entry = {
-                            "username": player,
-                            "game": game_name,
-                            "individual_score": score,
-                            "team": data.get("team", "default"),
-                            "team_score": data.get("team_score", 0),
-                            "game_time": data.get("game_time", 0),
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        
-                        # 4단계: 실제 파일 쓰기
-                        try:
+                    # only process scores for games that support resonance
+                    if game_name in GAMES_LIBRARY and GAMES_LIBRARY.get(game_name).get("resonance"):
+                        if player and game_name:
+                            session_entry = {
+                                "username": player,
+                                "game": game_name,
+                                "individual_score": individual_score,
+                                "team": team,
+                                "team_score": team_score,
+                                "game_time": game_time,
+                                "timestamp": datetime.now().isoformat()
+                            }
                             _append_session(session_entry)
-                            # ⭐ 이 로그가 떠야 리더보드에 이름이 올라가!
-                            print(f"--- ✅ [SUCCESS] 장부 기록 완료: {player} ({score}점) ---")
-                        except Exception as e:
-                            print(f"--- [DEBUG 4 ERROR] 파일 쓰기 실패: {e}")
-                    else:
-                        print(f"--- [DEBUG 3 ERROR] '{game_name}'의 resonance 설정이 False이거나 정보가 없어.")
                     continue
-                
+
                 if action == "login":
                     username = data.get("username", "").strip()
                     password = data.get("password", "")
                     result = authenticate_account(username, password)
 
-                    # server.py 의 handle_client 함수 내부 - "login" 처리 부분
                     if result == "existing":
                         client_state["authenticated"] = True
                         client_state["username"] = username
-<<<<<<< HEAD
                         team = accounts.get(username).get("team", "default")
                         try:
                             tc = team_chats.get(team)
@@ -501,22 +465,9 @@ async def handle_client(client):
                             "team": team,
                             "chat_history": _chats_to_dict(game_chats),
                             "team_chat_history": tc_history
-=======
-                        
-                        # [수정] 매치 히스토리 가져오기
-                        match_history_module.refresh() # 최신 파일 읽기
-                        user_matches = match_history_module.get_match_history(username)
-
-                        initial_payload = {
-                            "type": "initial",
-                            "username": username,
-                            "team": accounts.get(username).get("team", "default"),
-                            "chat_history": _chats_to_dict(game_chats),
-                            "match_history": user_matches  # ✅ 이 줄이 빠져있었어!
->>>>>>> 58400efae7f884f59d874e44e2d6211ceff6dc65
                         }
                         await client.send(json.dumps(initial_payload))
-                       
+
                     elif result == "new":
                         password_hash = hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
                         client_state["pending_username"] = username

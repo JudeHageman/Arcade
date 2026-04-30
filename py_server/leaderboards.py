@@ -1,7 +1,8 @@
 import sys
 from pathlib import Path
 
- 
+sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "algorithms" / "sorting"))
 
 # dynamic array used for ordered leaderboard output
 from dynamic_array import ArrayList
@@ -10,26 +11,7 @@ from dynamic_array import ArrayList
 from bst import BST
 
 # mergesort used for score-range result ordering
-base_path = Path(__file__).parent.parent.parent.parent
-
-# 1. 자료구조 경로 (Arcade/data_structures)
-ds_path = str(base_path / "data_structures")
-if ds_path not in sys.path:
-    sys.path.insert(0, ds_path)
-
-# 2. 알고리즘 경로 (Arcade/algorithms/sorting)
-sorting_path = str(base_path / "algorithms" / "sorting")
-if sorting_path not in sys.path:
-    sys.path.insert(0, sorting_path)
-
-# 임포트 시도
-try:
-    from dynamic_array import ArrayList
-    from merge_sort import mergesort
-    print("✅ Successfully imported ArrayList and MergeSort")
-except ImportError as e:
-    print(f"❌ Import failed: {e}")
- 
+from merge_sort import mergesort
 
 # custom hash table for leaderboard state
 from hash_table import HashTable
