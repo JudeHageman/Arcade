@@ -47,6 +47,9 @@ accounts_file = data_folder / "accounts.ndjson"
 # chat log
 chats_file = data_folder / "chats.ndjson"
 
+# team chat log
+team_chats_file = data_folder / "team_chats.ndjson"
+
 # sessions log (all game sessions for all users)
 sessions_file = data_folder / "sessions.ndjson"
 
@@ -57,6 +60,8 @@ games_file = data_folder / "games.ndjson"
 connected_clients = HashTable()
 game_chats = HashTable()
 recent_chats = HashTable()
+team_chats = HashTable()
+recent_team_chats = HashTable()
 accounts = HashTable()
 
 def _load_games():
@@ -107,44 +112,145 @@ def _load_accounts():
 accounts = _load_accounts()
 
 def _load_chats():
-    """Load persisted chat history from chats.ndjson into game_chats."""
+    """Load the last 50 chat messages per game from chats.ndjson"""
     chats = HashTable()
     if not chats_file.exists():
         return chats
+
+    # resolve which games to collect for so we know when to stop early
+    known_games = set()
+    for i in range(GAMES_LIBRARY.capacity):
+        for game_name, _ in GAMES_LIBRARY.table[i]:
+            known_games.add(game_name)
+
+    LIMIT = 50
+    CHUNK = 64 * 1024  # bytes per backwards read
+
+    # collected[game] = list of entries, most-recent first
+    collected = {}
+
     try:
-        with chats_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    game_name = entry.get("game")
-                    if not game_name:
+        with chats_file.open("rb") as f:
+            f.seek(0, 2)
+            pos = f.tell()
+            leftover = b""
+
+            while pos > 0:
+                read_size = min(CHUNK, pos)
+                pos -= read_size
+                f.seek(pos)
+                chunk = f.read(read_size) + leftover
+                lines = chunk.split(b"\n")
+                # first element may be a partial line when not at file start
+                if pos > 0:
+                    leftover = lines[0]
+                    lines = lines[1:]
+                else:
+                    leftover = b""
+
+                for line in reversed(lines):
+                    line = line.strip()
+                    if not line:
                         continue
                     try:
-                        chat_list = chats.get(game_name)
-                    except KeyError:
-                        chat_list = ArrayList()
-                        chats.put(game_name, chat_list)
-                    chat_list.append({
-                        "sender": entry.get("sender", ""),
-                        "message": entry.get("message", ""),
-                        "timestamp": entry.get("timestamp", "")
-                    })
-                except Exception:
-                    continue
+                        entry = json.loads(line)
+                        game_name = entry.get("game")
+                        if not game_name:
+                            continue
+                        bucket = collected.setdefault(game_name, [])
+                        if len(bucket) < LIMIT:
+                            bucket.append({
+                                "sender": entry.get("sender", ""),
+                                "message": entry.get("message", ""),
+                                "timestamp": entry.get("timestamp", "")
+                            })
+                    except Exception:
+                        continue
+
+                # stop once every known game has reached the limit
+                if known_games and all(
+                    len(collected.get(g, [])) >= LIMIT for g in known_games
+                ):
+                    break
+
     except Exception:
         pass
-    # keep only the last 50 messages per game
-    for i in range(chats.capacity):
-        for _, chat_list in chats.table[i]:
-            while len(chat_list) > 50:
-                chat_list.pop(0)
+
+    # reverse back to chronological order and store in the HashTable
+    for game_name, messages in collected.items():
+        messages.reverse()
+        chat_list = ArrayList()
+        for msg in messages:
+            chat_list.append(msg)
+        chats.put(game_name, chat_list)
+
     return chats
 
 # load chat history on server startup
 game_chats = _load_chats()
+
+def _load_team_chats():
+    """Load the last 50 team chat messages per team from team_chats.ndjson."""
+    
+    chats = HashTable()
+    if not team_chats_file.exists():
+        return chats
+
+    LIMIT = 50
+    CHUNK = 64 * 1024
+    collected = {}
+
+    try:
+        with team_chats_file.open("rb") as f:
+            f.seek(0, 2)
+            pos = f.tell()
+            leftover = b""
+
+            while pos > 0:
+                read_size = min(CHUNK, pos)
+                pos -= read_size
+                f.seek(pos)
+                chunk = f.read(read_size) + leftover
+                lines = chunk.split(b"\n")
+                if pos > 0:
+                    leftover = lines[0]
+                    lines = lines[1:]
+                else:
+                    leftover = b""
+
+                for line in reversed(lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        team_name = entry.get("team")
+                        if not team_name:
+                            continue
+                        bucket = collected.setdefault(team_name, [])
+                        if len(bucket) < LIMIT:
+                            bucket.append({
+                                "sender": entry.get("sender", ""),
+                                "message": entry.get("message", ""),
+                                "timestamp": entry.get("timestamp", "")
+                            })
+                    except Exception:
+                        continue
+
+    except Exception:
+        pass
+
+    for team_name, messages in collected.items():
+        messages.reverse()
+        chat_list = ArrayList()
+        for msg in messages:
+            chat_list.append(msg)
+        chats.put(team_name, chat_list)
+
+    return chats
+
+# load team chat history on server startup
+team_chats = _load_team_chats()
 
 def _chats_to_dict(chats_ht):
     """Convert the chat HashTable to a plain dict for JSON serialization."""
@@ -211,7 +317,7 @@ async def check_game_server(host, port):
 
 async def send_status():
     """Broadcast the current status of all games and chats to connected clients."""
-    global recent_chats
+    global recent_chats, recent_team_chats
 
     while True:
         try:
@@ -264,7 +370,29 @@ async def send_status():
                     except KeyError:
                         pass
 
+            # send each authenticated client their own team's recent messages
+            for i in range(connected_clients.capacity):
+                for client, state in connected_clients.table[i]:
+                    if not state.get("authenticated"):
+                        continue
+                    username = state.get("username") or ""
+                    try:
+                        team = accounts.get(username).get("team", "default")
+                    except KeyError:
+                        team = "default"
+                    try:
+                        recent = recent_team_chats.get(team)
+                        msgs = [recent[k] for k in range(len(recent))]
+                    except KeyError:
+                        msgs = []
+                    if msgs:
+                        try:
+                            await client.send(json.dumps({"type": "team_chat_update", "messages": msgs}))
+                        except Exception:
+                            pass
+
             recent_chats = HashTable()
+            recent_team_chats = HashTable()
             await asyncio.sleep(2)
             
         except Exception:
@@ -326,11 +454,17 @@ async def handle_client(client):
                         client_state["authenticated"] = True
                         client_state["username"] = username
                         team = accounts.get(username).get("team", "default")
+                        try:
+                            tc = team_chats.get(team)
+                            tc_history = [tc[k] for k in range(len(tc))]
+                        except KeyError:
+                            tc_history = []
                         initial_payload = {
                             "type": "initial",
                             "username": username,
                             "team": team,
-                            "chat_history": _chats_to_dict(game_chats)
+                            "chat_history": _chats_to_dict(game_chats),
+                            "team_chat_history": tc_history
                         }
                         await client.send(json.dumps(initial_payload))
 
@@ -353,11 +487,17 @@ async def handle_client(client):
                             client_state["username"] = pending_username
                             client_state["pending_username"] = None
                             client_state["pending_hash"] = None
+                            try:
+                                tc = team_chats.get(team)
+                                tc_history = [tc[k] for k in range(len(tc))]
+                            except KeyError:
+                                tc_history = []
                             initial_payload = {
                                 "type": "initial",
                                 "username": pending_username,
                                 "team": team,
-                                "chat_history": _chats_to_dict(game_chats)
+                                "chat_history": _chats_to_dict(game_chats),
+                                "team_chat_history": tc_history
                             }
                             await client.send(json.dumps(initial_payload))
                     continue
@@ -410,6 +550,43 @@ async def handle_client(client):
                         await client.send(json.dumps({"type": "games_catalog", "rows": rows}))
 
                     continue
+
+                if action == "team_chat":
+                    message = data.get("message", "").strip()
+                    sender = client_state.get("username") or "Unknown"
+
+                    if message and sender:
+                        try:
+                            team = accounts.get(sender).get("team", "default")
+                        except KeyError:
+                            team = "default"
+
+                        try:
+                            chat_list = team_chats.get(team)
+                        except KeyError:
+                            chat_list = ArrayList()
+                            team_chats.put(team, chat_list)
+                        try:
+                            recent_list = recent_team_chats.get(team)
+                        except KeyError:
+                            recent_list = ArrayList()
+                            recent_team_chats.put(team, recent_list)
+
+                        chat_entry = {
+                            "sender": sender,
+                            "message": message,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        chat_list.append(chat_entry)
+                        recent_list.append(chat_entry)
+                        if len(chat_list) > 50:
+                            chat_list.pop(0)
+
+                        try:
+                            with team_chats_file.open("a", encoding="utf-8") as f:
+                                f.write(json.dumps({"team": team, **chat_entry}) + "\n")
+                        except Exception:
+                            pass
 
                 if action == "chat":
                     game_name = data.get("game")

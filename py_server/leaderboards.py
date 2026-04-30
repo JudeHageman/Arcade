@@ -41,7 +41,7 @@ class LeaderboardEntry:
             return self.score > other.score
         return self.username < other.username
 
-# load the initial leaderboard state from the session
+# load initial session stats into _raw
 for session in memory.sessions:
     game = session.get("game")
     username = session.get("username")
@@ -56,46 +56,31 @@ for session in memory.sessions:
 
     try:
         stats = game_raw.get(username)
-        is_new = False
     except KeyError:
-        stats = HashTable()
-        stats.put("best_score", 0)
-        stats.put("total_score", 0)
-        stats.put("play_time", 0)
-        stats.put("games", 0)
+        stats = {"best_score": 0, "total_score": 0, "play_time": 0, "games": 0}
         game_raw.put(username, stats)
-        is_new = True
 
-    try:
-        game_trees = _trees.get(game)
-    except KeyError:
+    score = session.get("individual_score", 0)
+    play_time = session.get("game_time", 0)
+
+    stats["total_score"] += score
+    stats["play_time"] += play_time
+    stats["games"] += 1
+    if score > stats["best_score"]:
+        stats["best_score"] = score
+
+# build each BST once at startup to avoid O(n log n) insert time during refresh
+for i in range(_raw.capacity):
+    for game, game_raw in _raw.table[i]:
         game_trees = HashTable()
         for key in MODES:
             game_trees.put(key, BST())
         _trees.put(game, game_trees)
-
-    if not is_new:
-        game_trees.get("best_score").delete(LeaderboardEntry(stats.get("best_score"), username))
-        game_trees.get("total_score").delete(LeaderboardEntry(stats.get("total_score"), username))
-        game_trees.get("play_time").delete(LeaderboardEntry(stats.get("play_time"), username))
-
-    score = session.get("individual_score", 0)
-    play_time = session.get("game_time", 0)
-    best_score = stats.get("best_score")
-    total_score = stats.get("total_score") + score
-    total_play_time = stats.get("play_time") + play_time
-    games_played = stats.get("games") + 1
-
-    stats.put("total_score", total_score)
-    stats.put("play_time", total_play_time)
-    stats.put("games", games_played)
-    if score > best_score:
-        best_score = score
-        stats.put("best_score", best_score)
-
-    game_trees.get("best_score").insert(LeaderboardEntry(best_score, username))
-    game_trees.get("total_score").insert(LeaderboardEntry(total_score, username))
-    game_trees.get("play_time").insert(LeaderboardEntry(total_play_time, username))
+        for j in range(game_raw.capacity):
+            for username, stats in game_raw.table[j]:
+                game_trees.get("best_score").insert(LeaderboardEntry(stats["best_score"], username))
+                game_trees.get("total_score").insert(LeaderboardEntry(stats["total_score"], username))
+                game_trees.get("play_time").insert(LeaderboardEntry(stats["play_time"], username))
 
 
 def get_leaderboard(game_name, top_n=10, sort_by="best_score"):
@@ -213,11 +198,7 @@ def refresh():
             stats = game_raw.get(username)
             is_new = False
         except KeyError:
-            stats = HashTable()
-            stats.put("best_score", 0)
-            stats.put("total_score", 0)
-            stats.put("play_time", 0)
-            stats.put("games", 0)
+            stats = {"best_score": 0, "total_score": 0, "play_time": 0, "games": 0}
             game_raw.put(username, stats)
             is_new = True
 
@@ -230,23 +211,23 @@ def refresh():
             _trees.put(game, game_trees)
 
         if not is_new:
-            game_trees.get("best_score").delete(LeaderboardEntry(stats.get("best_score"), username))
-            game_trees.get("total_score").delete(LeaderboardEntry(stats.get("total_score"), username))
-            game_trees.get("play_time").delete(LeaderboardEntry(stats.get("play_time"), username))
+            game_trees.get("best_score").delete(LeaderboardEntry(stats["best_score"], username))
+            game_trees.get("total_score").delete(LeaderboardEntry(stats["total_score"], username))
+            game_trees.get("play_time").delete(LeaderboardEntry(stats["play_time"], username))
 
         score = session.get("individual_score", 0)
         play_time = session.get("game_time", 0)
-        best_score = stats.get("best_score")
-        total_score = stats.get("total_score") + score
-        total_play_time = stats.get("play_time") + play_time
-        games_played = stats.get("games") + 1
+        best_score = stats["best_score"]
+        total_score = stats["total_score"] + score
+        total_play_time = stats["play_time"] + play_time
+        games_played = stats["games"] + 1
 
-        stats.put("total_score", total_score)
-        stats.put("play_time", total_play_time)
-        stats.put("games", games_played)
+        stats["total_score"] = total_score
+        stats["play_time"] = total_play_time
+        stats["games"] = games_played
         if score > best_score:
             best_score = score
-            stats.put("best_score", best_score)
+            stats["best_score"] = best_score
 
         game_trees.get("best_score").insert(LeaderboardEntry(best_score, username))
         game_trees.get("total_score").insert(LeaderboardEntry(total_score, username))
