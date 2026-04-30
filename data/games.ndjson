@@ -1,0 +1,3 @@
+{"Immortal Tree": {"port": 8080, "path": "immortal_tree", "resonance": true}}
+{"Game 2": {"port": 8081, "path": "game_2", "resonance": false}}
+{"Game 3": {"port": 8082, "path": "game_3", "resonance": false}}

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 support.py - Utility helpers for the game
 
@@ -105,3 +106,28 @@ def import_csv_to_sparse(path):
                 if val.strip() != '-1':
                     result[(row_idx, col_idx)] = int(val.strip())
         return result
+||||||| 82bc39c
+=======
+from csv import reader
+from os import walk
+import pygame
+
+def import_csv_layout(path):
+	terrain_map = []
+	with open(path) as level_map:
+		layout = reader(level_map,delimiter = ',')
+		for row in layout:
+			terrain_map.append(list(row))
+		return terrain_map
+
+def import_folder(path):
+	surface_list = []
+
+	for _,__,img_files in walk(path):
+		for image in img_files:
+			full_path = path + '/' + image
+			image_surf = pygame.image.load(full_path).convert_alpha()
+			surface_list.append(image_surf)
+
+	return surface_list
+>>>>>>> origin/main
