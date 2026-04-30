@@ -55,6 +55,7 @@ def get_match_history(username, game=None, date_from=None, date_to=None, outcome
     while node:
         sessions.append(node.value)
         node = node.next
+
     filtered = ArrayList()
     index = len(sessions) - 1
     while index >= 0:
@@ -69,9 +70,6 @@ def get_match_history(username, game=None, date_from=None, date_to=None, outcome
             index -= 1
             continue
         if outcome == "positive" and entry.get("individual_score") <= 0:
-            index -= 1
-            continue
-        if outcome == "zero" and entry.get("individual_score") != 0:
             index -= 1
             continue
         filtered.append(entry)

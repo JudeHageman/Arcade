@@ -2,9 +2,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "algorithms" / "sorting"))
 
 # custom hash table for game catalog data
 from hash_table import HashTable
+
+# heap sort used to sort games by popularity metrics
+from heap_sort import heap_sort
 
 # shared account and session data
 import memory
@@ -27,9 +31,11 @@ for session in memory.sessions:
     except KeyError:
         stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": ""}
         _stats.put(game, stats)
+
     stats["total_sessions"] += 1
     stats["_total_score"] += session.get("individual_score", 0)
     stats["avg_score"] = round(stats["_total_score"] / stats["total_sessions"], 2)
+
     timestamp = session.get("timestamp", "")
     if timestamp > stats["last_played"]:
         stats["last_played"] = timestamp
@@ -57,17 +63,18 @@ def get_all_games():
     return result
 
 def get_all_games_sorted(sort_by="most_played"):
-    """Return all games ordered by the requested aggregate metric."""
+    """Return all games ordered by the requested aggregate metric using heap sort."""
 
     key_map = {"most_played": "total_sessions", "highest_avg_score": "avg_score", "most_recently_active": "last_played"}
-    key = key_map.get(sort_by, "total_sessions")
-    return sorted(get_all_games(), key=lambda g: g.get(key, 0), reverse=True)
+    key_name = key_map.get(sort_by, "total_sessions")
+    return heap_sort(get_all_games(), key=lambda g: g.get(key_name, 0), reverse=True)
 
 def refresh():
     """Append any newly loaded games and sessions into the in-memory snapshot."""
 
     for game_name, info in memory.new_games().items():
         _games.put(game_name, info)
+
     for session in memory.new_sessions():
         game = session.get("game")
         if not game:
@@ -77,9 +84,11 @@ def refresh():
         except KeyError:
             stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": ""}
             _stats.put(game, stats)
+
         stats["total_sessions"] += 1
         stats["_total_score"] += session.get("individual_score", 0)
         stats["avg_score"] = round(stats["_total_score"] / stats["total_sessions"], 2)
+
         timestamp = session.get("timestamp", "")
         if timestamp > stats["last_played"]:
             stats["last_played"] = timestamp

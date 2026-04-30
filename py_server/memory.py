@@ -8,6 +8,11 @@ _session_counter = 0
 _account_counter = 0
 _game_counter = 0
 
+# cached batch from the most recent refresh() call — shared across all modules
+_pending_sessions = []
+_pending_accounts = {}
+_pending_games = {}
+
 # data files
 accounts = {}
 sessions = []
@@ -33,6 +38,7 @@ def load():
     """Load the full in-memory snapshot for accounts, sessions, and games."""
 
     global accounts, sessions, games, _session_counter, _account_counter, _game_counter
+
     account_entries = _read("accounts.ndjson")
     accounts = {}
     for entry in account_entries:
@@ -48,38 +54,47 @@ def load():
         games.update(entry)
     _game_counter = len(game_entries)
 
-def new_sessions():
-    """Append any newly written session records and return them."""
+def refresh():
+    """Read any new records from disk and cache them for this request cycle.
 
-    global sessions, _session_counter
+    Call this once per query before dispatching to any module. All modules
+    read from the same cached batch via new_sessions / new_accounts / new_games,
+    so every module sees the same new records regardless of call order.
+    """
+
+    global sessions, accounts, games
+    global _session_counter, _account_counter, _game_counter
+    global _pending_sessions, _pending_accounts, _pending_games
+
     all_sessions = _read("sessions.ndjson")
-    new = all_sessions[_session_counter:]
-    sessions.extend(new)
+    _pending_sessions = all_sessions[_session_counter:]
+    sessions.extend(_pending_sessions)
     _session_counter = len(all_sessions)
-    return new
+
+    all_account_entries = _read("accounts.ndjson")
+    _pending_accounts = {}
+    for entry in all_account_entries[_account_counter:]:
+        _pending_accounts.update(entry)
+    accounts.update(_pending_accounts)
+    _account_counter = len(all_account_entries)
+
+    all_game_entries = _read("games.ndjson")
+    _pending_games = {}
+    for entry in all_game_entries[_game_counter:]:
+        _pending_games.update(entry)
+    games.update(_pending_games)
+    _game_counter = len(all_game_entries)
+
+def new_sessions():
+    """Return the sessions collected during the most recent refresh() call."""
+    return _pending_sessions
 
 def new_accounts():
-    """Append any newly written account records and return them."""
-
-    global accounts, _account_counter
-    all_entries = _read("accounts.ndjson")
-    new = {}
-    for entry in all_entries[_account_counter:]:
-        new.update(entry)
-    accounts.update(new)
-    _account_counter = len(all_entries)
-    return new
+    """Return the accounts collected during the most recent refresh() call."""
+    return _pending_accounts
 
 def new_games():
-    """Append any newly written game records and return them."""
-    
-    global games, _game_counter
-    all_entries = _read("games.ndjson")
-    new = {}
-    for entry in all_entries[_game_counter:]:
-        new.update(entry)
-    games.update(new)
-    _game_counter = len(all_entries)
-    return new
+    """Return the games collected during the most recent refresh() call."""
+    return _pending_games
 
 load()

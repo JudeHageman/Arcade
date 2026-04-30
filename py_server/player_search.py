@@ -51,6 +51,7 @@ def search_players(prefix):
             entry.put("username", current)
             entry.put("team", team)
             results.append(entry)
+
         for char, child in node.children.items():
             stack_nodes.append(child)
             stack_names.append(current + char)
@@ -67,10 +68,12 @@ def get_player(username):
         _table.get(username)
     except KeyError:
         return None
+
     import profile as _profile
     data = _profile.get_profile(username)
     if data is None:
         return {"username": username, "team": _table.get(username)}
+
     result = {"username": username}
     for key, value in data.items():
         result[key] = value

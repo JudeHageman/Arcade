@@ -24,8 +24,6 @@ def _new_profile(team):
     profile.put("total_score", 0)
     profile.put("best_score", 0)
     profile.put("total_time", 0)
-    profile.put("_per_game", HashTable())
-    profile.put("win_rate_per_game", HashTable())
     profile.put("score_history", ArrayList())
     return profile
 
@@ -56,20 +54,6 @@ for session in memory.sessions:
     if score > profile.get("best_score"):
         profile.put("best_score", score)
 
-    per_game = profile.get("_per_game")
-    try:
-        game_stats = per_game.get(game)
-    except KeyError:
-        game_stats = HashTable()
-        game_stats.put("games", 0)
-        game_stats.put("wins", 0)
-        per_game.put(game, game_stats)
-
-    game_stats.put("games", game_stats.get("games") + 1)
-    if score > 0:
-        game_stats.put("wins", game_stats.get("wins") + 1)
-    profile.get("win_rate_per_game").put(game, round(game_stats.get("wins") / game_stats.get("games"), 3))
-
     score_history = profile.get("score_history")
     entry = HashTable()
     entry.put("game", game)
@@ -86,12 +70,6 @@ def get_profile(username):
         profile = _profiles.get(username)
     except KeyError:
         return None
-    win_rates = {}
-    win_rate_table = profile.get("win_rate_per_game")
-    for i in range(win_rate_table.capacity):
-        bucket = win_rate_table.table[i]
-        for key, value in bucket:
-            win_rates[key] = value
 
     score_history = []
     for entry in profile.get("score_history"):
@@ -107,7 +85,6 @@ def get_profile(username):
         "total_score": profile.get("total_score"),
         "best_score": profile.get("best_score"),
         "total_time": profile.get("total_time"),
-        "win_rate_per_game": win_rates,
         "score_history": score_history,
     }
 
@@ -119,6 +96,7 @@ def refresh():
             _profiles.get(username)
         except KeyError:
             _profiles.put(username, _new_profile(data.get("team", "unknown")))
+
     for session in memory.new_sessions():
         username = session.get("username")
         if not username:
@@ -137,20 +115,6 @@ def refresh():
         profile.put("total_time", profile.get("total_time") + session.get("game_time", 0))
         if score > profile.get("best_score"):
             profile.put("best_score", score)
-
-        per_game = profile.get("_per_game")
-        try:
-            game_stats = per_game.get(game)
-        except KeyError:
-            game_stats = HashTable()
-            game_stats.put("games", 0)
-            game_stats.put("wins", 0)
-            per_game.put(game, game_stats)
-
-        game_stats.put("games", game_stats.get("games") + 1)
-        if score > 0:
-            game_stats.put("wins", game_stats.get("wins") + 1)
-        profile.get("win_rate_per_game").put(game, round(game_stats.get("wins") / game_stats.get("games"), 3))
 
         score_history = profile.get("score_history")
         entry = HashTable()
