@@ -1,5 +1,8 @@
 {
     "python.analysis.extraPaths": [
-        "./data_structures"
+        "./data_structures",
+        "./algorithms/sorting",
+        "./tests/integration/test_",
+        "./py_server"
     ]
 }

@@ -18,7 +18,7 @@ from merge_sort import mergesort
 from hash_table import HashTable
 
 # shared account and session data
-import memory
+import memory as memory_module
 
 # leaderboard trees and raw stats by game
 _trees = HashTable()
@@ -43,7 +43,7 @@ class LeaderboardEntry:
         return self.username < other.username
 
 # load the initial leaderboard state from the session
-for session in memory.sessions:
+for session in memory_module.sessions:
     game = session.get("game")
     username = session.get("username")
     if not game or not username:
@@ -198,7 +198,7 @@ def get_all_games():
 def refresh():
     """Process any newly loaded sessions and update all leaderboard trees."""
 
-    for session in memory.new_sessions():
+    for session in memory_module.new_sessions():
         game = session.get("game")
         username = session.get("username")
         if not game or not username:
@@ -252,5 +252,8 @@ def refresh():
         game_trees.get("best_score").insert(LeaderboardEntry(best_score, username))
         game_trees.get("total_score").insert(LeaderboardEntry(total_score, username))
         game_trees.get("play_time").insert(LeaderboardEntry(total_play_time, username))
+
+# Re-export memory module for test access
+memory = memory_module
 
 
