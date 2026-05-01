@@ -37,7 +37,7 @@ class LeaderboardScreen(BaseScreen):
         self.refresh_layout()
 
     def refresh_layout(self):
-        """네비게이션 바 아래로 모든 요소 재배치 및 스케일링"""
+         
         self.scale = max(self.app.WIDTH / self.base_w, 0.6)
         s = self.scale
         cx = self.app.WIDTH // 2
