@@ -6,6 +6,7 @@ import math
 from screens.base_screen import BaseScreen
 from ui.button import Button
 from ui.input_box import InputBox
+import json
 
 class GamesScreen(BaseScreen):
     def __init__(self, app):
@@ -129,34 +130,58 @@ class GamesScreen(BaseScreen):
             print(f"❌ [LAUNCH ERROR] {e}")
 
     def update(self):
-        """Monitor active processes and handle game termination"""
         for game in self.active_games[:]:
             proc = game["process"]
-            if proc.poll() is not None: # Process finished
-                stdout, _ = proc.communicate()
+            ret = proc.poll()
+            if ret is not None:
+                print(f"✅ 종료 감지: {game['name']}, returncode={ret}")
+                try:
+                    stdout, _ = proc.communicate(timeout=3)
+                except Exception as e:
+                    print(f"communicate 실패: {e}")
+                    stdout = ""
+                print(f"stdout: '{stdout}'")
                 self.handle_game_end(game["name"], stdout)
                 self.active_games.remove(game)
 
     def handle_game_end(self, game_name, output):
-        # [추가] 게임이 뱉은 모든 글자를 다 찍어봅니다.
         print(f"--- [DEBUG] Raw Output from {game_name} ---\n{output}\n--- [END DEBUG] ---")
-        
-        score = 0
-        # 공백이나 대소문자 문제일 수 있으니 strip()과 lower()를 섞어서 찾아봅시다.
-        for line in output.split('\n'):
-            clean_line = line.strip().upper()
-            if "FINAL_SCORE" in clean_line:
-                try:
-                    score = int(clean_line.split(':')[-1].strip())
-                except: pass
 
-        print(f"📊 [PARSED RESULT] {game_name} -> Score: {score}")
-        
-        # 서버로 전송
-        net_mgr = getattr(self.app, 'network_manager', None)
-        if net_mgr:
-            # [주의] 서버가 "action": "score"를 원하는지 "submit_score"를 원하는지 확인!
-            net_mgr.send_score(game_name, score)
+        for line in output.split('\n'):
+            line = line.strip()
+            if line.startswith("[USER]"):
+                try:
+                    json_str = line[len("[USER]"):].strip()
+                    data = json.loads(json_str)
+                    if data.get("action") == "score":
+                        self.app.network.send_action(
+                            "score",
+                            game=data.get("game", game_name),
+                            individual_score=data.get("individual_score", 0),
+                            team=data.get("team", "blue"),
+                            team_score=data.get("team_score", 0),
+                            game_time=data.get("game_time", 0)
+                        )
+                        print(f"📊 [SCORE SENT] {game_name} -> {data}")
+                except Exception as e:
+                    print(f"❌ [SCORE PARSE ERROR] {e}")
+
+            # ↓ 이 부분이 빠져있었어요!
+            elif "FINAL_SCORE" in line.upper():
+                try:
+                    score = int(line.split(':')[-1].strip())
+                    team = self.app.shared_data.get("team", "blue")
+                    self.app.network.send_action(
+                        "score",
+                        game=game_name,
+                        individual_score=score,
+                        team=team,
+                        team_score=0,
+                        game_time=0
+                    )
+                    print(f"📊 [SCORE SENT] {game_name} -> {score}")
+                except Exception as e:
+                    print(f"❌ [SCORE PARSE ERROR] {e}")
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.VIDEORESIZE:

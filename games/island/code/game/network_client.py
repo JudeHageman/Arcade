@@ -222,3 +222,28 @@ class NetworkClient:
         self.connected = False
         if self.sock:
             self.sock.close()
+   
+    def send_score(self, game_name, score, team, team_score=0, game_time=0):
+        """서버가 로그에 찍을 수 있도록 점수 데이터를 JSON으로 전송"""
+        if not self.connected:
+            return
+
+        # 유저님이 원하시는 바로 그 형식의 데이터 구성
+        payload = {
+            "type": "user",
+            "action": "score",
+            "username": self.player_name,
+            "game": game_name,
+            "individual_score": score,
+            "team": team,
+            "team_score": team_score,
+            "game_time": game_time
+        }
+
+        try:
+            # 서버가 한 줄 단위로 읽을 수 있게 끝에 \n을 반드시 붙여야 합니다.
+            message = json.dumps(payload) + "\n"
+            self.sock.sendall(message.encode('utf-8'))
+            print(f"📡 [NETWORK] Score data sent to server: {score}")
+        except Exception as e:
+            print(f"❌ [NETWORK] Failed to send score: {e}")

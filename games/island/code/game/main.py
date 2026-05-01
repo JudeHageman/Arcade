@@ -128,17 +128,31 @@ class Game:
             self.clock.tick(FPS)
 
     def exit_game(self):
-        """종료 시 세션 전송 및 정리"""
-        if hasattr(self, 'session'):
-            print("--- SESSION: Sending data to server... ---")
-            self.session.print_session() 
-            
-            # 🚨 [핵심] 데이터를 보내고 서버가 읽을 시간을 줍니다.
-            time.sleep(0.3) 
-            
-        if self.level and hasattr(self.level, 'network'):
-            self.level.network.disconnect()
-            
+        """게임 종료 시 점수 전송 및 로그 출력"""
+        if hasattr(self, 'level') and self.level.player:
+            # 1. 점수 계산
+            final_score = self.level.player.exp
+            # 게임 시작 시간부터 현재까지의 소요 시간 (초)
+            # (init에 self.start_time = time.time() 이 있다고 가정)
+            play_time = int(time.time() - getattr(self, 'start_time', time.time()))
+
+            # 2. 메인 앱(GamesScreen)이 읽을 수 있게 터미널에 출력
+            print(f"FINAL_SCORE: {final_score}")
+            sys.stdout.flush() 
+
+            # 3. 게임 서버(C++)로 직접 데이터 전송
+            # level.network가 NetworkClient 인스턴스라고 가정합니다.
+            if hasattr(self.level, 'network') and self.level.network.connected:
+                self.level.network.send_score(
+                    game_name="Island Gardener",
+                    score=final_score,
+                    team=self.team,
+                    team_score=getattr(self.level, 'team_kills', 0),
+                    game_time=play_time
+                )
+                # 전송이 완료될 때까지 아주 잠깐 대기 (데이터 유실 방지)
+                time.sleep(0.5)
+
         print("--- SYSTEM: Closing game... ---")
         pygame.quit()
         sys.exit()
