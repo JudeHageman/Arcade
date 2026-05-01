@@ -21,13 +21,13 @@ _histories = HashTable()
 def _make_session_record(session):
     """Build the session record stored inside each player's history."""
 
-    record = HashTable()
-    record.put("game", session.get("game", ""))
-    record.put("individual_score", session.get("individual_score", 0))
-    record.put("team_score", session.get("team_score", 0))
-    record.put("game_time", session.get("game_time", 0))
-    record.put("timestamp", session.get("timestamp", ""))
-    return record
+    return {
+        "game": session.get("game", ""),
+        "individual_score": session.get("individual_score", 0),
+        "team_score": session.get("team_score", 0),
+        "game_time": session.get("game_time", 0),
+        "timestamp": session.get("timestamp", ""),
+    }
 
 # load the initial match histories from the session
 for session in memory.sessions:

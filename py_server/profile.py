@@ -55,11 +55,7 @@ for session in memory.sessions:
         profile.put("best_score", score)
 
     score_history = profile.get("score_history")
-    entry = HashTable()
-    entry.put("game", game)
-    entry.put("score", score)
-    entry.put("timestamp", session.get("timestamp", ""))
-    score_history.insert(0, entry)
+    score_history.insert(0, {"game": game, "score": score, "timestamp": session.get("timestamp", "")})
     if len(score_history) > 50:
         score_history.pop()
 
@@ -117,11 +113,7 @@ def refresh():
             profile.put("best_score", score)
 
         score_history = profile.get("score_history")
-        entry = HashTable()
-        entry.put("game", game)
-        entry.put("score", score)
-        entry.put("timestamp", session.get("timestamp", ""))
-        score_history.insert(0, entry)
+        score_history.insert(0, {"game": game, "score": score, "timestamp": session.get("timestamp", "")})
         if len(score_history) > 50:
             score_history.pop()
 

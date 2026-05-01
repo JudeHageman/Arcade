@@ -57,6 +57,7 @@ leaderboards_widget = None
 player_search_widget = None
 match_history_widget = None
 games_catalog_widget = None
+team_chat_widget = None
 team_widget = None
 
 def change_screen(screen_name):
@@ -66,7 +67,8 @@ def change_screen(screen_name):
     
     # hide all screens
     for w in (games_widget, profile_widget, leaderboards_widget,
-              player_search_widget, match_history_widget, games_catalog_widget):
+              player_search_widget, match_history_widget, games_catalog_widget,
+              team_chat_widget):
         if w:
             w.pack_forget()
     
@@ -84,6 +86,8 @@ def change_screen(screen_name):
         match_history_widget.pack(fill=tk.BOTH, expand=True)
     elif screen_name == "games_catalog" and games_catalog_widget:
         games_catalog_widget.pack(fill=tk.BOTH, expand=True)
+    elif screen_name == "team_chat" and team_chat_widget:
+        team_chat_widget.pack(fill=tk.BOTH, expand=True)
 
 def change_view(view):
     """Switch the client between disconnected, login, and games views."""
@@ -249,6 +253,8 @@ async def persistent_connection():
                                 entry = {}
                                 games_data.put(game_name, entry)
                             entry["chat_history"] = messages
+                        team_chat_history = data.get("team_chat_history", [])
+                        window.after(0, lambda msgs=team_chat_history: _load_team_chat_history(msgs))
                         window.after(0, lambda u=username, t=player_team: change_username(u, t))
                         continue
 
@@ -269,6 +275,13 @@ async def persistent_connection():
                                 entry["chat_history"] = []
                             entry["chat_history"].extend(messages)
                         window.after(0, update_games_ui)
+                        continue
+
+                    if data.get("type") == "team_chat_update":
+                        if not authenticated:
+                            continue
+                        msgs = data.get("messages", [])
+                        window.after(0, lambda m=msgs: _append_team_chat_messages(m))
                         continue
 
                     if data.get("type") == "profile":
@@ -667,6 +680,7 @@ button_frame = tk.Frame(navigation_frame)
 button_frame.pack(expand=True)
 tk.Button(button_frame, text="Games", font=("Arial", 9), command=lambda: change_screen("games")).pack(side=tk.LEFT, padx=3)
 tk.Button(button_frame, text="Game Catalog", font=("Arial", 9), command=lambda: change_screen("games_catalog")).pack(side=tk.LEFT, padx=3)
+tk.Button(button_frame, text="Team Chat", font=("Arial", 9), command=lambda: change_screen("team_chat")).pack(side=tk.LEFT, padx=3)
 tk.Button(button_frame, text="Leaderboards", font=("Arial", 9), command=lambda: change_screen("leaderboards")).pack(side=tk.LEFT, padx=3)
 tk.Button(button_frame, text="Player Search", font=("Arial", 9), command=lambda: change_screen("player_search")).pack(side=tk.LEFT, padx=3)
 tk.Button(button_frame, text="Match History", font=("Arial", 9), command=lambda: change_screen("match_history")).pack(side=tk.LEFT, padx=3)
@@ -865,6 +879,65 @@ def display_games_catalog(rows):
             gc_text.insert(tk.END,
                 f"{row.get('name','')} {row.get('total_sessions',0)} {row.get('avg_score',0.0)} {row.get('last_played','')[:19]}\n")
     gc_text.config(state=tk.DISABLED)
+
+
+# team chat screen
+team_chat_widget = tk.Frame(content_frame)
+
+team_chat_header = tk.Label(team_chat_widget, text="Team Chat", font=("Arial", 10, "bold"))
+team_chat_header.pack(pady=(6, 2))
+
+team_chat_display = tk.Text(
+    team_chat_widget,
+    height=18,
+    width=50,
+    state=tk.DISABLED,
+    font=("Arial", 9),
+    bg="white"
+)
+team_chat_display.pack(padx=10, pady=5)
+
+team_chat_input_frame = tk.Frame(team_chat_widget)
+team_chat_input_frame.pack(pady=4, padx=10, fill=tk.X)
+
+team_chat_input = tk.Entry(team_chat_input_frame, font=("Arial", 9), width=44)
+team_chat_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+
+def send_team_chat_message():
+    """Send a team chat message to the server."""
+    global ws, ws_loop
+    message = team_chat_input.get().strip()
+    if not message or not ws_connection or not ws or not ws_loop or not authenticated:
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            ws.send(json.dumps({"action": "team_chat", "message": message})),
+            ws_loop
+        )
+        team_chat_input.delete(0, tk.END)
+    except Exception:
+        pass
+
+tk.Button(team_chat_input_frame, text="Send", font=("Arial", 9),
+    command=send_team_chat_message).pack(side=tk.LEFT, padx=5)
+team_chat_input.bind("<Return>", lambda e: send_team_chat_message())
+
+def _load_team_chat_history(messages):
+    """Populate the team chat display with the history received on login."""
+    team_chat_display.config(state=tk.NORMAL)
+    team_chat_display.delete(1.0, tk.END)
+    for msg in messages:
+        team_chat_display.insert(tk.END, f"{msg.get('sender','')}: {msg.get('message','')}\n")
+    team_chat_display.see(tk.END)
+    team_chat_display.config(state=tk.DISABLED)
+
+def _append_team_chat_messages(messages):
+    """Append new team chat messages from the periodic update."""
+    team_chat_display.config(state=tk.NORMAL)
+    for msg in messages:
+        team_chat_display.insert(tk.END, f"{msg.get('sender','')}: {msg.get('message','')}\n")
+    team_chat_display.see(tk.END)
+    team_chat_display.config(state=tk.DISABLED)
 
 
 change_view("disconnected")

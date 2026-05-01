@@ -8,7 +8,7 @@ This file contains the implementation of a the hashtable data structure.
 from dynamic_array import ArrayList
 
 class HashTable:
-    def __init__(self, capacity=10):
+    def __init__(self, capacity=16):
         self.capacity = capacity
         self.size = 0
         # Create an ArrayList of ArrayLists for chaining
@@ -18,6 +18,18 @@ class HashTable:
 
     def _hash(self, key):
         return hash(key) % self.capacity
+
+    def _resize(self):
+        old_table = self.table
+        old_capacity = self.capacity
+        self.capacity = self.capacity * 2
+        self.table = ArrayList(self.capacity)
+        for _ in range(self.capacity):
+            self.table.append(ArrayList())
+        self.size = 0
+        for i in range(old_capacity):
+            for key, value in old_table[i]:
+                self.put(key, value)
 
     def put(self, key, value):
         if self.size / self.capacity > 0.75:

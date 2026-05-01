@@ -3,10 +3,10 @@ from pathlib import Path
 
 _data = Path(__file__).parent.parent / "data"
 
-# track how many records have already been loaded
-_session_counter = 0
-_account_counter = 0
-_game_counter = 0
+# track how far into each file we have already consumed
+_session_offset = 0
+_account_offset = 0
+_game_offset = 0
 
 # cached batch from the most recent refresh() call — shared across all modules
 _pending_sessions = []
@@ -18,72 +18,67 @@ accounts = {}
 sessions = []
 games = {}
 
-def _read(filename):
-    """Read NDJSON records from a data file and return them as a list."""
-
+def _read_from(filename, offset):
+    """Read new NDJSON records from a file starting at byte offset."""
     path = _data / filename
     if not path.exists():
-        return []
-    lines = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line:
-            try:
-                lines.append(json.loads(line))
-            except Exception:
-                pass
-    return lines
+        return [], offset
+    records = []
+    new_offset = offset
+    try:
+        with path.open("rb") as f:
+            f.seek(offset)
+            new_bytes = f.read()
+            new_offset = offset + len(new_bytes)
+        for line in new_bytes.decode("utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return records, new_offset
 
 def load():
     """Load the full in-memory snapshot for accounts, sessions, and games."""
 
-    global accounts, sessions, games, _session_counter, _account_counter, _game_counter
+    global accounts, sessions, games, _session_offset, _account_offset, _game_offset
 
-    account_entries = _read("accounts.ndjson")
+    account_entries, _account_offset = _read_from("accounts.ndjson", 0)
     accounts = {}
     for entry in account_entries:
         accounts.update(entry)
-    _account_counter = len(account_entries)
 
-    sessions = _read("sessions.ndjson")
-    _session_counter = len(sessions)
+    sessions, _session_offset = _read_from("sessions.ndjson", 0)
 
-    game_entries = _read("games.ndjson")
+    game_entries, _game_offset = _read_from("games.ndjson", 0)
     games = {}
     for entry in game_entries:
         games.update(entry)
-    _game_counter = len(game_entries)
 
 def refresh():
-    """Read any new records from disk and cache them for this request cycle.
-
-    Call this once per query before dispatching to any module. All modules
-    read from the same cached batch via new_sessions / new_accounts / new_games,
-    so every module sees the same new records regardless of call order.
-    """
+    """Read any new records from disk and cache them for this request cycle."""
 
     global sessions, accounts, games
-    global _session_counter, _account_counter, _game_counter
+    global _session_offset, _account_offset, _game_offset
     global _pending_sessions, _pending_accounts, _pending_games
 
-    all_sessions = _read("sessions.ndjson")
-    _pending_sessions = all_sessions[_session_counter:]
+    _pending_sessions, _session_offset = _read_from("sessions.ndjson", _session_offset)
     sessions.extend(_pending_sessions)
-    _session_counter = len(all_sessions)
 
-    all_account_entries = _read("accounts.ndjson")
+    new_account_entries, _account_offset = _read_from("accounts.ndjson", _account_offset)
     _pending_accounts = {}
-    for entry in all_account_entries[_account_counter:]:
+    for entry in new_account_entries:
         _pending_accounts.update(entry)
     accounts.update(_pending_accounts)
-    _account_counter = len(all_account_entries)
 
-    all_game_entries = _read("games.ndjson")
+    new_game_entries, _game_offset = _read_from("games.ndjson", _game_offset)
     _pending_games = {}
-    for entry in all_game_entries[_game_counter:]:
+    for entry in new_game_entries:
         _pending_games.update(entry)
     games.update(_pending_games)
-    _game_counter = len(all_game_entries)
 
 def new_sessions():
     """Return the sessions collected during the most recent refresh() call."""
