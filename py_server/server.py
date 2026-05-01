@@ -64,6 +64,13 @@ team_chats = HashTable()
 recent_team_chats = HashTable()
 accounts = HashTable()
 
+async def _send_packet(target, packet):
+    """Print and send a raw JSON packet with a leading newline."""
+    if not isinstance(packet, str):
+        packet = json.dumps(packet)
+    print(f"\n{packet}")
+    await target.send(packet)
+
 def _load_games():
     """Load games from disk."""
     games = HashTable()
@@ -356,7 +363,7 @@ async def send_status():
 
             if len(clients):
                 results = await asyncio.gather(
-                    *(clients[j].send(message) for j in range(len(clients))),
+                    *(_send_packet(clients[j], message) for j in range(len(clients))),
                     return_exceptions=True
                 )
 
@@ -387,7 +394,7 @@ async def send_status():
                         msgs = []
                     if msgs:
                         try:
-                            await client.send(json.dumps({"type": "team_chat_update", "messages": msgs}))
+                            await _send_packet(client, {"type": "team_chat_update", "messages": msgs})
                         except Exception:
                             pass
 
@@ -403,7 +410,7 @@ async def handle_client(client):
     connected_clients.put(client, {"authenticated": False, "username": None, "pending_hash": None})
 
     try:
-        await client.send(json.dumps({"type": "auth_required", "message": "Login required."}))
+        await _send_packet(client, {"type": "auth_required", "message": "Login required."})
     except Exception:
         try:
             connected_clients.remove(client)
@@ -414,6 +421,7 @@ async def handle_client(client):
     try:
         async for payload in client:
             try:
+                print(f"\n{payload}")
                 data = json.loads(payload)
                 try:
                     client_state = connected_clients.get(client)
@@ -466,13 +474,13 @@ async def handle_client(client):
                             "chat_history": _chats_to_dict(game_chats),
                             "team_chat_history": tc_history
                         }
-                        await client.send(json.dumps(initial_payload))
+                        await _send_packet(client, initial_payload)
 
                     elif result == "new":
                         password_hash = hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
                         client_state["pending_username"] = username
                         client_state["pending_hash"] = password_hash
-                        await client.send(json.dumps({"type": "select_team"}))
+                        await _send_packet(client, {"type": "select_team"})
                     continue
 
                 if not client_state.get("authenticated"):
@@ -499,7 +507,7 @@ async def handle_client(client):
                                 "chat_history": _chats_to_dict(game_chats),
                                 "team_chat_history": tc_history
                             }
-                            await client.send(json.dumps(initial_payload))
+                            await _send_packet(client, initial_payload)
                     continue
 
                 if action == "query":
@@ -516,7 +524,7 @@ async def handle_client(client):
                     if query_type == "profile":
                         target = data.get("username", username)
                         result = profile_module.get_profile(target)
-                        await client.send(json.dumps({"type": "profile", "data": result}))
+                        await _send_packet(client, {"type": "profile", "data": result})
 
                     elif query_type == "leaderboard":
                         game_name = data.get("game", "")
@@ -524,7 +532,7 @@ async def handle_client(client):
                         top_n = data.get("top_n", 10)
                         rows = leaderboards_module.get_leaderboard(game_name, top_n=top_n, sort_by=sort_by)
                         rank = leaderboards_module.get_own_rank(game_name, username, sort_by=sort_by)
-                        await client.send(json.dumps({"type": "leaderboard", "game": game_name, "sort_by": sort_by, "rows": rows, "own_rank": rank}))
+                        await _send_packet(client, {"type": "leaderboard", "game": game_name, "sort_by": sort_by, "rows": rows, "own_rank": rank})
 
                     elif query_type == "match_history":
                         target = data.get("username", username)
@@ -532,22 +540,22 @@ async def handle_client(client):
                         date_from = data.get("date_from", None)
                         date_to = data.get("date_to", None)
                         rows = match_history_module.get_match_history(target, game=game_filter, date_from=date_from, date_to=date_to)
-                        await client.send(json.dumps({"type": "match_history", "data": rows}))
+                        await _send_packet(client, {"type": "match_history", "data": rows})
 
                     elif query_type == "player_search":
                         prefix = data.get("prefix", "")
                         results = player_search_module.search_players(prefix) if prefix else []
-                        await client.send(json.dumps({"type": "player_search", "results": results}))
+                        await _send_packet(client, {"type": "player_search", "results": results})
 
                     elif query_type == "player_profile":
                         target = data.get("username", "")
                         result = player_search_module.get_player(target)
-                        await client.send(json.dumps({"type": "player_profile", "data": result}))
+                        await _send_packet(client, {"type": "player_profile", "data": result})
 
                     elif query_type == "games_catalog":
                         sort_by = data.get("sort_by", "most_played")
                         rows = games_module.get_all_games_sorted(sort_by)
-                        await client.send(json.dumps({"type": "games_catalog", "rows": rows}))
+                        await _send_packet(client, {"type": "games_catalog", "rows": rows})
 
                     continue
 

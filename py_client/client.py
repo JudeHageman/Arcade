@@ -1,5 +1,6 @@
 # used for the UI
 import tkinter as tk
+import tkinter.ttk as ttk
 
 # needed to open the game as a separate process and watch for it to close
 import subprocess
@@ -74,20 +75,20 @@ def change_screen(screen_name):
     
     # show the selected screen
     if screen_name == "games" and games_widget:
-        games_widget.pack(fill=tk.BOTH, expand=True)
+        games_widget.pack(fill=tk.X)
     elif screen_name == "profile" and profile_widget:
-        profile_widget.pack(fill=tk.BOTH, expand=True)
+        profile_widget.pack(fill=tk.X)
         send_query({"action": "query", "query": "profile"})
     elif screen_name == "leaderboards" and leaderboards_widget:
-        leaderboards_widget.pack(fill=tk.BOTH, expand=True)
+        leaderboards_widget.pack(fill=tk.X)
     elif screen_name == "player_search" and player_search_widget:
-        player_search_widget.pack(fill=tk.BOTH, expand=True)
+        player_search_widget.pack(fill=tk.X)
     elif screen_name == "match_history" and match_history_widget:
-        match_history_widget.pack(fill=tk.BOTH, expand=True)
+        match_history_widget.pack(fill=tk.X)
     elif screen_name == "games_catalog" and games_catalog_widget:
-        games_catalog_widget.pack(fill=tk.BOTH, expand=True)
+        games_catalog_widget.pack(fill=tk.X)
     elif screen_name == "team_chat" and team_chat_widget:
-        team_chat_widget.pack(fill=tk.BOTH, expand=True)
+        team_chat_widget.pack(fill=tk.X)
 
 def change_view(view):
     """Switch the client between disconnected, login, and games views."""
@@ -100,6 +101,8 @@ def change_view(view):
             player_label.config(text="Player: N/A")
         if 'team_label' in globals():
             team_label.config(text="Team: N/A")
+        if '_recolor' in globals():
+            _recolor("white")
         if 'navigation_frame' in globals() and navigation_frame:
             navigation_frame.pack_forget()
         window.title("Resonance - N/A")
@@ -134,7 +137,7 @@ def change_view(view):
         if 'navigation_frame' in globals() and navigation_frame:
             navigation_frame.pack(fill=tk.X, padx=5, pady=5)
         if main_widget:
-            main_widget.pack(fill=tk.BOTH, expand=True)
+            main_widget.pack(fill=tk.X)
         change_screen("games")
 
 def clear_game_state():
@@ -146,7 +149,7 @@ def clear_game_state():
     game_buttons.clear()
     chat_widgets.clear()
 
-    for widget in games_widget.winfo_children():
+    for widget in games_inner.winfo_children():
         widget.destroy()
 
 def show_team_select():
@@ -181,9 +184,11 @@ def change_username(username, team="default"):
 
     authenticated = True
     player_name = username
-    player_label.config(text=f"Player: {player_name}")
-    team_label.config(text=f"Team: {team.capitalize()}")
+    _team_color = TEAM_COLORS.get(team.lower(), TEAM_COLORS["default"])
+    player_label.config(text=f"Player: {player_name}", fg=_team_color)
+    team_label.config(text=f"Team: {team.capitalize()}", fg=_team_color)
     window.title(f"Resonance - {player_name}")
+    _recolor(_team_color)
 
     if username_entry:
         username_entry.config(state=tk.DISABLED)
@@ -401,11 +406,11 @@ def update_games_ui():
 
     if games_data.size == 0:
         if game_buttons.size > 0:
-            for widget in games_widget.winfo_children():
+            for widget in games_inner.winfo_children():
                 widget.destroy()
             game_buttons.clear()
             chat_widgets.clear()
-            label = tk.Label(games_widget, text="No games available", font=("Arial", 10))
+            label = tk.Label(games_inner, text="No games available", font=("Arial", 10))
             label.pack(pady=20)
             loaded_games = HashTable()
         return
@@ -421,7 +426,7 @@ def update_games_ui():
                 break
 
     if not same_games:
-        for widget in games_widget.winfo_children():
+        for widget in games_inner.winfo_children():
             widget.destroy()
         game_buttons.clear()
         chat_widgets.clear()
@@ -430,6 +435,8 @@ def update_games_ui():
         for i in range(games_data.capacity):
             for game_name, game_info in games_data.table[i]:
                 create_game_ui(game_name, game_info)
+
+        _recolor(TEAM_COLORS.get(player_team, "white"))
 
         loaded_games = HashTable()
         for i in range(games_data.capacity):
@@ -446,7 +453,7 @@ def update_games_ui():
 
 def create_game_ui(game_name, game_info):
     """Create the UI elements for a given game."""
-    game_container = tk.Frame(games_widget, relief=tk.SUNKEN, bd=1, width=400)
+    game_container = tk.Frame(games_inner, relief=tk.FLAT, bd=0, bg="black", width=400)
     game_container.pack(pady=10, padx=10)
     
     button_frame = tk.Frame(game_container)
@@ -483,7 +490,7 @@ def create_game_ui(game_name, game_info):
         width=40,
         state=tk.DISABLED,
         font=("Arial", 8),
-        bg="white"
+        bg="#1a1a1a"
     )
     chat_display.pack(pady=5, padx=5)
     
@@ -555,12 +562,23 @@ def _read_game_stdout(proc):
 
 def _restore_game_button(game_process, game_name):
     """Restore a game button after its process closes."""
-    global game_instance
+    global game_instance, running_game_name
     game_process.wait()
     # Only restore the button if the game_instance hasn't been manually set to None (by user closing)
     if game_instance is not None and game_instance.pid == game_process.pid:
+        running_game_name = None
         if game_name in game_buttons:
-            game_buttons.get(game_name)["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
+            try:
+                info = games_data.get(game_name)
+                status = info.get("status", "unknown") if info else "unknown"
+            except Exception:
+                status = "unknown"
+            btn_state = tk.NORMAL if status == "connected" else tk.DISABLED
+            game_buttons.get(game_name)["button"].config(
+                text=f"Launch {game_name}",
+                command=lambda: run_game(game_name),
+                state=btn_state
+            )
 
 def run_game(game_name):
     """Run a game as a separate process."""
@@ -620,7 +638,17 @@ def close_game(game_name):
         game_instance = None
         running_game_name = None
         if game_name in game_buttons:
-            game_buttons.get(game_name)["button"].config(text=f"Launch {game_name}", command=lambda: run_game(game_name))
+            try:
+                info = games_data.get(game_name)
+                status = info.get("status", "unknown") if info else "unknown"
+            except Exception:
+                status = "unknown"
+            btn_state = tk.NORMAL if status == "connected" else tk.DISABLED
+            game_buttons.get(game_name)["button"].config(
+                text=f"Launch {game_name}",
+                command=lambda: run_game(game_name),
+                state=btn_state
+            )
 
 def send_query(payload):
     """Send a query request to the server."""
@@ -633,6 +661,79 @@ def send_query(payload):
 window = tk.Tk()
 window.title(f"Resonance - {player_name}")
 window.geometry("700x600")
+window.configure(bg="black")
+
+TEAM_COLORS = {"pink": "#FFB6C1", "green": "#B4EEB4", "blue": "#ADD8E6", "default": "#555555"}
+
+# decorative background canvas (drawn behind all other widgets)
+_bg_canvas = tk.Canvas(window, highlightthickness=0)
+_bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+
+def _draw_bg(*_):
+    _bg_canvas.delete("all")
+    w = max(window.winfo_width(), 1)
+    h = max(window.winfo_height(), 1)
+    _bg_canvas.configure(bg="black")
+    # large off-center overlapping circles — Resonance brand style
+    # pink: top-left-ish
+    _bg_canvas.create_oval(int(w*-0.1), int(h*-0.05), int(w*0.65), int(h*0.75), outline="#FFB6C1", width=2)
+    # pink inner (offset)
+    _bg_canvas.create_oval(int(w*0.05), int(h*0.55), int(w*0.7), int(h*1.3), outline="#FFB6C1", width=1)
+    # green: top-right
+    _bg_canvas.create_oval(int(w*0.35), int(h*-0.2), int(w*1.1), int(h*0.7), outline="#B4EEB4", width=2)
+    # green large bottom
+    _bg_canvas.create_oval(int(w*0.1), int(h*0.4), int(w*0.95), int(h*1.3), outline="#B4EEB4", width=1)
+    # blue: bottom-left
+    _bg_canvas.create_oval(int(w*-0.2), int(h*0.3), int(w*0.6), int(h*1.1), outline="#ADD8E6", width=2)
+    # blue top-right small
+    _bg_canvas.create_oval(int(w*0.6), int(h*-0.1), int(w*1.05), int(h*0.45), outline="#ADD8E6", width=1)
+    # extra pink mid-right
+    _bg_canvas.create_oval(int(w*0.55), int(h*0.2), int(w*1.15), int(h*0.9), outline="#FFB6C1", width=1)
+    # diagonal lines across full screen
+    _bg_canvas.create_line(0, int(h*0.28), w, int(h*0.34), fill="#B4EEB4", width=1)
+    _bg_canvas.create_line(0, int(h*0.72), w, int(h*0.66), fill="#ADD8E6", width=1)
+    _bg_canvas.create_line(int(w*0.32), 0, int(w*0.38), h, fill="#FFB6C1", width=1)
+    _bg_canvas.create_line(int(w*0.62), 0, int(w*0.58), h, fill="#B4EEB4", width=1)
+    _bg_canvas.create_line(0, int(h*0.5), w, int(h*0.5), fill="#ADD8E6", width=1)
+
+window.bind("<Configure>", _draw_bg)
+
+def _recolor(fg):
+    """Recursively apply fg text color and black bg to all widgets."""
+    _ebg = "#1a1a1a"
+    def walk(w):
+        cls = w.winfo_class()
+        try:
+            if cls in ("Frame",):
+                w.configure(bg="black")
+            elif cls == "Label":
+                w.configure(fg=fg, bg="black")
+            elif cls == "Button":
+                if w in _team_btn_map:
+                    w.configure(fg=_team_btn_map[w], activeforeground=_team_btn_map[w], bg="black", activebackground="black")
+                else:
+                    w.configure(fg=fg, bg="black", activeforeground=fg, activebackground="#222222")
+            elif cls == "Entry":
+                w.configure(fg=fg, bg=_ebg, insertbackground=fg)
+            elif cls == "Text":
+                w.configure(fg=fg, bg=_ebg)
+            elif cls == "Listbox":
+                w.configure(fg=fg, bg=_ebg)
+            elif cls == "Radiobutton":
+                w.configure(fg=fg, bg="black", activebackground="black", selectcolor="black")
+            elif cls == "Canvas":
+                w.configure(bg="black")
+            elif cls == "Scrollbar":
+                w.configure(bg="#222222", troughcolor="black")
+        except tk.TclError:
+            pass
+        for child in w.winfo_children():
+            walk(child)
+    walk(window)
+
+# Resonance title at the top centered
+resonance_label = tk.Label(window, text="Resonance", font=("Arial", 22, "bold"), fg="white", bg="black")
+resonance_label.pack(pady=(12, 2))
 
 # login
 login_widget = tk.Frame(window)
@@ -645,7 +746,7 @@ tk.Label(login_widget, text="Password", font=("Arial", 9)).grid(row=1, column=0,
 password_entry = tk.Entry(login_widget, font=("Arial", 9), width=20, show="*")
 password_entry.grid(row=1, column=1, padx=5, pady=2)
 
-login_button = tk.Button(login_widget, text="Login", font=("Arial", 9), command=send_login)
+login_button = tk.Button(login_widget, text="Create Account / Login", font=("Arial", 9), command=send_login)
 login_button.grid(row=2, column=0, columnspan=2, pady=6)
 
 # server connection status display
@@ -661,18 +762,27 @@ team_label.pack(pady=0)
 
 
 # team selection (shown only for new accounts, hidden by default)
+_team_btn_map = {}  # maps button widget -> its team color, so _recolor preserves them
 team_widget = tk.Frame(window)
 tk.Label(team_widget, text="Choose your team:", font=("Arial", 9)).pack(pady=(4, 2))
 team_btn_frame = tk.Frame(team_widget)
 team_btn_frame.pack()
-for _team, _color in [("pink", "#ffb6c1"), ("green", "#b4eeb4"), ("blue", "#add8e6")]:
-    tk.Button(
+for _team, _color in [("pink", "#FFB6C1"), ("green", "#B4EEB4"), ("blue", "#ADD8E6")]:
+    _tb = tk.Button(
         team_btn_frame,
         text=_team.capitalize(),
-        font=("Arial", 9),
+        font=("Arial", 10, "bold"),
         width=10,
+        fg=_color,
+        bg="black",
+        activeforeground=_color,
+        activebackground="black",
+        relief=tk.RAISED,
+        bd=2,
         command=lambda t=_team: send_team(t)
-    ).pack(side=tk.LEFT, padx=6)
+    )
+    _tb.pack(side=tk.LEFT, padx=6)
+    _team_btn_map[_tb] = _color
 
 # navigation frame with buttons for different screens (placed in header)
 navigation_frame = tk.Frame(window)
@@ -692,10 +802,34 @@ main_widget = tk.Frame(window)
 
 # content frame to hold all screens
 content_frame = tk.Frame(main_widget)
-content_frame.pack(fill=tk.BOTH, expand=True)
+content_frame.pack(fill=tk.X)
 
 # games screen
 games_widget = tk.Frame(content_frame)
+_games_canvas = tk.Canvas(games_widget, highlightthickness=0, bg="black", height=380)
+_sb_style = ttk.Style()
+_sb_style.theme_use("default")
+_sb_style.configure("Dark.Vertical.TScrollbar", background="#2a2a2a", troughcolor="#111111", arrowcolor="#555555", bordercolor="#111111", darkcolor="#1a1a1a", lightcolor="#1a1a1a")
+_games_scrollbar = ttk.Scrollbar(games_widget, orient="vertical", command=_games_canvas.yview, style="Dark.Vertical.TScrollbar")
+games_inner = tk.Frame(_games_canvas)
+_games_canvas.configure(yscrollcommand=_games_scrollbar.set)
+_games_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+_games_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+_games_canvas_win = _games_canvas.create_window((0, 0), window=games_inner, anchor="nw")
+
+def _on_games_inner_resize(event):
+    _games_canvas.configure(scrollregion=_games_canvas.bbox("all"))
+
+def _on_games_canvas_resize(event):
+    _games_canvas.itemconfig(_games_canvas_win, width=event.width)
+
+def _on_games_mousewheel(event):
+    _games_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+games_inner.bind("<Configure>", _on_games_inner_resize)
+_games_canvas.bind("<Configure>", _on_games_canvas_resize)
+_games_canvas.bind("<MouseWheel>", _on_games_mousewheel)
+games_inner.bind("<MouseWheel>", _on_games_mousewheel)
 
 # profile screen
 profile_widget = tk.Frame(content_frame)
@@ -709,7 +843,7 @@ def display_profile(data):
     if not data:
         profile_text.insert(tk.END, "No profile found.\n")
     else:
-        profile_text.insert(tk.END, f"Username: {data.get('username', 'N/A')}\n")
+        profile_text.insert(tk.END, f"Username: {data.get('username', None) or player_name}\n")
         profile_text.insert(tk.END, f"Team: {data.get('team', 'N/A')}\n")
         profile_text.insert(tk.END, f"Total Games: {data.get('total_games', 0)}\n")
         profile_text.insert(tk.END, f"Total Score: {data.get('total_score', 0)}\n")
@@ -749,14 +883,15 @@ def display_leaderboard(data):
     lb_text.delete(1.0, tk.END)
     rows = data.get("rows", [])
     own_rank = data.get("own_rank")
-    if own_rank:
+    if own_rank is not None:
         lb_text.insert(tk.END, f"Your rank: #{own_rank}\n")
-    lb_text.insert(tk.END, "\n")
-    if not rows:
-        lb_text.insert(tk.END, "No data.\n")
     else:
+        lb_text.insert(tk.END, "Your rank: not ranked\n")
+    if rows:
         for i, row in enumerate(rows, 1):
             lb_text.insert(tk.END, f"{i} {row.get('username','')} {row.get('score',0)}\n")
+    else:
+        lb_text.insert(tk.END, "No data.\n")
     lb_text.config(state=tk.DISABLED)
 
 
@@ -893,15 +1028,15 @@ team_chat_display = tk.Text(
     width=50,
     state=tk.DISABLED,
     font=("Arial", 9),
-    bg="white"
+    bg="#1a1a1a"
 )
 team_chat_display.pack(padx=10, pady=5)
 
 team_chat_input_frame = tk.Frame(team_chat_widget)
-team_chat_input_frame.pack(pady=4, padx=10, fill=tk.X)
+team_chat_input_frame.pack(pady=4, padx=10)
 
 team_chat_input = tk.Entry(team_chat_input_frame, font=("Arial", 9), width=44)
-team_chat_input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+team_chat_input.pack(side=tk.LEFT, padx=5)
 
 def send_team_chat_message():
     """Send a team chat message to the server."""
@@ -939,6 +1074,9 @@ def _append_team_chat_messages(messages):
     team_chat_display.see(tk.END)
     team_chat_display.config(state=tk.DISABLED)
 
+
+_draw_bg()
+_recolor("white")
 
 change_view("disconnected")
 
