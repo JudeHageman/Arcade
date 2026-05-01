@@ -20,6 +20,12 @@ class HashTable:
         return hash(key) % self.capacity
 
     def put(self, key, value):
+        if self.size / self.capacity > 0.75:
+            self._rehash()
+        self._put_direct(key, value)
+
+    def _put_direct(self, key, value):
+        """Insert without triggering rehash — used internally by _rehash."""
         index = self._hash(key)
         bucket = self.table[index]
         for i in range(len(bucket)):
@@ -28,6 +34,19 @@ class HashTable:
                 return
         bucket.append((key, value))
         self.size += 1
+
+    def _rehash(self):
+        old_table = self.table
+        self.capacity *= 2
+        self.size = 0
+        self.table = ArrayList(self.capacity)
+        for _ in range(self.capacity):
+            self.table.append(ArrayList())
+        for i in range(len(old_table)):
+            bucket = old_table[i]
+            for j in range(len(bucket)):
+                k, v = bucket[j]
+                self._put_direct(k, v)
 
     def get(self, key):
         index = self._hash(key)
@@ -59,3 +78,9 @@ class HashTable:
         for i in range(self.capacity):
             self.table[i] = ArrayList()
         self.size = 0
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        self.put(key, value)

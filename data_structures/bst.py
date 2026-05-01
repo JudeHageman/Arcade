@@ -60,45 +60,62 @@ class BST:
         return y
 
     def insert(self, value):
-        self.root = self._insert_recursive(self.root, value)
-
-    def _insert_recursive(self, node, value):
-        # 1. Standard BST insertion
-        if not node:
-            return Node(value)
+        # --- Phase 1: Standard iterative BST insert, tracking the path ---
+        new_node = Node(value)
         
-        if value < node.value:
-            node.left = self._insert_recursive(node.left, value)
-        else:
-            node.right = self._insert_recursive(node.right, value)
+        if not self.root:
+            self.root = new_node
+            return
 
-        # 2. Update height of this ancestor node
-        node.height = 1 + max(self.get_height(node.left), self.get_height(node.right))
+        path = []  # Stack of nodes visited, bottom-up rebalancing later
+        node = self.root
 
-        # 3. Get balance factor to check if it's unbalanced
-        balance = self.get_balance(node)
+        while node:
+            path.append(node)
+            if value < node.value:
+                if node.left is None:
+                    node.left = new_node
+                    break
+                node = node.left
+            else:
+                if node.right is None:
+                    node.right = new_node
+                    break
+                node = node.right
 
-        # 4. Handle 4 cases of imbalance
-        
-        # Case 1: Left Left (Single Right Rotation)
-        if balance > 1 and value < node.left.value:
-            return self._right_rotate(node)
+        # --- Phase 2: Walk back up the path, updating heights and rebalancing ---
+        for node in reversed(path):
+            node.height = 1 + max(self.get_height(node.left), self.get_height(node.right))
+            balance = self.get_balance(node)
 
-        # Case 2: Right Right (Single Left Rotation)
-        if balance < -1 and value > node.right.value:
-            return self._left_rotate(node)
+            # Determine parent so we can rewire after a rotation
+            parent = path[path.index(node) - 1] if path.index(node) > 0 else None
 
-        # Case 3: Left Right (Double Rotation)
-        if balance > 1 and value > node.left.value:
-            node.left = self._left_rotate(node.left)
-            return self._right_rotate(node)
+            new_subtree_root = None
 
-        # Case 4: Right Left (Double Rotation)
-        if balance < -1 and value < node.right.value:
-            node.right = self._right_rotate(node.right)
-            return self._left_rotate(node)
+            # Left Left
+            if balance > 1 and self.get_balance(node.left) >= 0:
+                new_subtree_root = self._right_rotate(node)
+            # Left Right
+            elif balance > 1 and self.get_balance(node.left) < 0:
+                node.left = self._left_rotate(node.left)
+                new_subtree_root = self._right_rotate(node)
+            # Right Right
+            elif balance < -1 and self.get_balance(node.right) <= 0:
+                new_subtree_root = self._left_rotate(node)
+            # Right Left
+            elif balance < -1 and self.get_balance(node.right) > 0:
+                node.right = self._right_rotate(node.right)
+                new_subtree_root = self._left_rotate(node)
 
-        return node
+            # If a rotation happened, rewire the parent's pointer
+            if new_subtree_root:
+                if parent is None:
+                    self.root = new_subtree_root
+                elif parent.left is node:
+                    parent.left = new_subtree_root
+                else:
+                    parent.right = new_subtree_root
     
     def delete(self, value):
         """Public method to delete a value."""
@@ -169,7 +186,12 @@ class BST:
     
     def contains(self, value):
         """Returns True if the value exists in the tree, False otherwise."""
-        return self._search_recursive(self.root, value)
+        node = self.root
+        while node:
+            if value == node.value:
+                return True
+            node = node.left if value < node.value else node.right
+        return False
 
     def _search_recursive(self, node, value):
         if not node:

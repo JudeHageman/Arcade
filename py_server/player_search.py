@@ -37,20 +37,28 @@ def search_players(prefix):
     stack_nodes.append(_trie._find_node(prefix))
     stack_names.append(prefix)
 
-    while len(stack_nodes):
+    # Continue searching only while we have nodes AND we haven't hit our limit
+    while len(stack_nodes) > 0 and len(results) < 20:
         node = stack_nodes.pop()
         current = stack_names.pop()
+        
         if node is None:
             continue
+            
         if node.is_end_of_word:
             try:
                 team = _table.get(current)
             except KeyError:
                 team = "unknown"
+            
             entry = HashTable()
             entry.put("username", current)
             entry.put("team", team)
             results.append(entry)
+
+        # Optimization: Check limit again before adding more children to the stack
+        if len(results) >= 20:
+            break
 
         for char, child in node.children.items():
             stack_nodes.append(child)
