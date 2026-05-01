@@ -6,7 +6,7 @@ from screens.login_screen import LoginScreen
 from screens.menu_screen import MenuScreen
 from screens.leaderboard_screen import LeaderboardScreen
 from screens.profile_screen import ProfileScreen
-from Trie import PlayerTrie
+ 
 from screens.catalog_screen import CatalogScreen
 from screens.in_game_chat_screen import InGameChatScreen
 from network_manager import NetworkManager
@@ -30,7 +30,6 @@ class ArcadeApp:
         
          
         self.shared_data = {}
-        self.player_trie = PlayerTrie() # This is our member database
          
         self.screens = {}  
         self.current_screen = None
