@@ -9,7 +9,7 @@ class MatchHistoryScreen(BaseScreen):
         super().__init__(app)
         self.resizable = True
         self.base_w, self.base_h = 1280, 720
-        self.nav_height = 110  # 상단 바 높이
+        self.nav_height = 110   
 
         self.colors = {
             "white": (255, 255, 255),
@@ -28,7 +28,7 @@ class MatchHistoryScreen(BaseScreen):
         self.row_height = 45
         self.max_scroll = 0
 
-        # --- UI 컴포넌트 생성 ---
+         
         self.user_input = InputBox(0, 0, 250, 40)
         self.user_input.text = self.app.shared_data.get("username", "")
         
@@ -41,7 +41,7 @@ class MatchHistoryScreen(BaseScreen):
         self.refresh_layout()
 
     def refresh_layout(self):
-        """네비게이션 바 아래로 레이아웃 재배치 및 스케일링"""
+         
         self.scale = max(self.app.WIDTH / self.base_w, 0.6)
         s = self.scale
         cx = self.app.WIDTH // 2
@@ -106,13 +106,13 @@ class MatchHistoryScreen(BaseScreen):
     def draw_decorations(self, screen, theme_color):
         self.time += 0.02
         s = self.scale
-        # 배경 오선
+         
         for i in range(5):
             y = self.table_rect.centery + (i * int(25 * s))
             pygame.draw.line(screen, self.colors["staff"], (0, y), (self.app.WIDTH, y - int(70 * s)), 2)
-        # 팀 공명 원
+         
         pygame.draw.circle(screen, theme_color, (int(80 * s), self.nav_height + int(80 * s)), int(45 * s + math.sin(self.time)*5), 3)
-        # 음표
+         
         note_colors = [self.colors["blue"], self.colors["pink"], self.colors["green"]]
         for i in range(3):
             nx = (250 + i * 400) * s
@@ -134,7 +134,7 @@ class MatchHistoryScreen(BaseScreen):
         self.draw_decorations(screen, theme_color)
 
         s = self.scale
-        # 1. 타이틀 및 입력 도구
+         
         title_surf = self.font_title.render("MATCH HISTORY", True, self.colors["black"])
         screen.blit(title_surf, (self.app.WIDTH // 2 - title_surf.get_width() // 2, self.title_y))
         
@@ -143,19 +143,19 @@ class MatchHistoryScreen(BaseScreen):
         self.load_btn.color = theme_color
         self.load_btn.draw(screen)
 
-        # 2. 테이블 헤더 (팀 컬러 배경)
+         
         header_y = self.table_rect.y - int(40 * s)
         header_rect = pygame.Rect(self.table_rect.x, header_y, self.table_rect.width, int(40 * s))
         pygame.draw.rect(screen, theme_color, header_rect, border_radius=int(8 * s))
         
-        # 컬럼 위치 계산 (비율에 따라 자동 조절)
+         
         col_w = self.table_rect.width
         cols = [("DATE", 20), ("GAME", 250), ("INDIV", 550), ("TEAM", 720), ("TIME", 880)]
         for text, x_off in cols:
             surf = self.font_header.render(text, True, self.colors["white"])
             screen.blit(surf, (header_rect.x + int(x_off * s), header_rect.y + int(10 * s)))
 
-        # 3. 데이터 리스트 (Clipping 적용)
+         
         pygame.draw.rect(screen, self.colors["panel"], self.table_rect, border_radius=int(10*s))
         
         old_clip = screen.get_clip()
@@ -165,18 +165,18 @@ class MatchHistoryScreen(BaseScreen):
             row_y = self.table_rect.y + (i * self.row_height) - self.scroll_y
             
             if row_y + self.row_height > self.table_rect.y and row_y < self.table_rect.bottom:
-                # 줄무늬 배경
+                 
                 if i % 2 == 0:
                     pygame.draw.rect(screen, self.colors["row_bg"], (self.table_rect.x + 5, row_y, self.table_rect.w - 10, self.row_height - 2), border_radius=5)
                 
-                # 데이터 파싱
+                 
                 date = row.get("timestamp", "")[:16].replace("T", " ")
                 game = row.get("game", "N/A")
                 indiv = row.get("individual_score", 0)
                 team_score = row.get("team_score", 0)
                 duration = f"{row.get('game_time', 0)}s"
 
-                # 행 텍스트 렌더링
+                 
                 screen.blit(self.font_row.render(date, True, self.colors["black"]), (header_rect.x + int(20 * s), row_y + int(12 * s)))
                 screen.blit(self.font_row.render(game, True, self.colors["black"]), (header_rect.x + int(250 * s), row_y + int(12 * s)))
                 screen.blit(self.font_row.render(str(indiv), True, self.colors["black"]), (header_rect.x + int(550 * s), row_y + int(12 * s)))

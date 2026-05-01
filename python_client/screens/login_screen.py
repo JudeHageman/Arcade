@@ -34,7 +34,7 @@ class LoginScreen(BaseScreen):
 
         self.start_btn = Button(cx - 150, cy + 130, 300, 55, "START RESONANCE", 
                         color=self.colors["staff"], 
-                        action=self.handle_login) # handle_start 대신 handle_login 연결!
+                        action=self.handle_login)  
 
         self.font_title = pygame.font.SysFont("Source Sans 3, Arial", 72, bold=True)
         self.font_label = pygame.font.SysFont("Source Sans 3, Arial", 18, bold=True)
@@ -120,7 +120,7 @@ class LoginScreen(BaseScreen):
 
          
         u_label = self.font_label.render("ACCOUNT ID", True, (150, 150, 150))
-        f_label = self.font_label.render("CHOOSE YOUR TEAM & START", True, (150, 150, 150))
+        f_label = self.font_label.render("CHOOSE YOUR TEAM", True, (150, 150, 150))
         screen.blit(u_label, (self.app.WIDTH // 2 - 150, self.app.HEIGHT // 2 - 130))
         screen.blit(f_label, (self.app.WIDTH // 2 - 150, self.app.HEIGHT // 2 + 20))
 
@@ -147,13 +147,13 @@ class LoginScreen(BaseScreen):
         password = self.pass_box.text.strip()
         
         if username and password:
-            # 선택한 진영 정보를 shared_data에 일단 저장
+             
             self.app.shared_data["faction"] = self.selected_faction
             
             hashed_pw = hash_password(password)
             print(f"--- UI DEBUG: Sending Login Action ({username}) ---")
             
-            # 서버로 로그인 요청 전송
+            
             self.app.network.send_action("login", username=username, password=hashed_pw)
         else:
             print("--- UI DEBUG: Missing ID or Password ---")

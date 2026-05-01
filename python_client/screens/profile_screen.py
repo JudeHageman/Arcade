@@ -8,59 +8,59 @@ class ProfileScreen(BaseScreen):
         super().__init__(app)
         self.nav_height = 110
         
-        # 기본 색상 팔레트
+        
         self.colors = {
             "white": (255, 255, 255),
             "black": (30, 30, 30),
             "gray": (200, 200, 200),
             "light_gray": (248, 248, 248),
-            # 팀별 테마 컬러
+             
             "blue": (100, 200, 255),
             "pink": (255, 120, 180),
             "green": (120, 230, 120)
         }
 
-        # --- 프로필 데이터 저장소 ---
+          
         self.profile_data = {} 
         
-        # 폰트 설정
+         
         self.font_name = pygame.font.SysFont("arial", 42, bold=True)
         self.font_label = pygame.font.SysFont("arial", 20, bold=True)
         self.font_value = pygame.font.SysFont("consolas", 24, bold=True)
         self.font_history = pygame.font.SysFont("arial", 16)
 
-        # UI 컴포넌트
+         
         self.logout_btn = Button(self.app.WIDTH - 150, self.app.HEIGHT - 80, 120, 45, 
                                  "LOGOUT", color=(255, 100, 100), action=self.app.network.logout)
         
         self.refresh_layout()
 
     def refresh_layout(self):
-        # 프로필 카드 영역
+         
         self.card_rect = pygame.Rect(150, 180, 400, 450)
-        # 통계 및 히스토리 영역
+         
         self.stats_rect = pygame.Rect(580, 180, 550, 450)
 
     def fetch_profile(self):
-        """서버에 내 프로필 정보 요청"""
+         
         print("--- NETWORK: Requesting my profile data ---")
         self.app.network.send_action("query", query="profile")
 
     def load_data(self, data):
-        """NetworkManager가 호출하여 데이터 로드"""
+         
         self.profile_data = data
         print(f"--- UI DEBUG: Profile loaded for {data.get('username')} ---")
 
     def draw_decorations(self, screen, theme_color):
-        """팀 테마에 맞는 음악적 장식 (오선지)"""
+         
         for i in range(5):
             y = 150 + (i * 25)
             pygame.draw.line(screen, (240, 240, 240), (0, y), (self.app.WIDTH, y), 2)
-            # 팀 컬러가 들어간 부드러운 원형 장식
+             
             pygame.draw.circle(screen, theme_color, (100, 500), 150, 1)
 
     def draw(self, screen):
-        # 1. 팀 테마 결정
+         
         faction = self.app.shared_data.get("team", "blue").lower()
         theme_color = self.colors.get(faction, self.colors["blue"])
         
@@ -80,7 +80,7 @@ class ProfileScreen(BaseScreen):
         team_surf = self.font_label.render(f"TEAM {faction.upper()}", True, self.colors["white"])
         screen.blit(team_surf, (self.card_rect.centerx - team_surf.get_width()//2, self.card_rect.y + 250))
 
-        # 3. 오른쪽: 상세 통계 지표
+         
         pygame.draw.rect(screen, self.colors["light_gray"], self.stats_rect, border_radius=20)
         pygame.draw.rect(screen, theme_color, self.stats_rect, 2, border_radius=20)
 

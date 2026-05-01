@@ -45,7 +45,7 @@ class MenuScreen(BaseScreen):
         self.time = 0
 
     def handle_logout(self):
-        """로그아웃 처리"""
+         
         if hasattr(self.app.network, "logout"):
             self.app.network.logout()
         else:
@@ -53,7 +53,7 @@ class MenuScreen(BaseScreen):
             self.app.switch_screen("LOGIN")
 
     def draw_music_note(self, screen, pos, color):
-        """음표 그리기 함수 (복구!)"""
+         
         x, y = int(pos[0]), int(pos[1])
         head_radius = 11   
         stem_len = 32      
@@ -63,12 +63,12 @@ class MenuScreen(BaseScreen):
         pygame.draw.line(screen, color, (x + head_radius - 2, y - stem_len), (x + head_radius + 12, y - stem_len + flag_size), 3)
 
     def draw_decorations(self, screen):
-        """오선지 및 파동 장식 그리기 (복구!)"""
+         
         self.time += 0.02
         faction_name = self.app.shared_data.get("team", "blue").lower()
         theme_color = self.colors.get(faction_name, self.colors["blue"])
         
-        # 오선지 그리기
+         
         line_spacing = 30
         slope = 0.05
         start_y_base = 400 
@@ -91,11 +91,11 @@ class MenuScreen(BaseScreen):
             self.draw_music_note(screen, (nx, ny), theme_color)
 
     def draw_header(self, screen):
-        """상단 유저 정보 표시"""
+         
         username = self.app.shared_data.get("username", "Guest")
         team = self.app.shared_data.get("team", "blue").upper()
         
-        # 상단 바 배경
+         
         pygame.draw.rect(screen, (240, 240, 240), (0, 0, self.app.WIDTH, 110))
         
         user_info = f"PLAYER: {username} | TEAM: {team}"
@@ -105,15 +105,15 @@ class MenuScreen(BaseScreen):
     def draw(self, screen):
         screen.fill(self.colors["white"])
         
-        # 1. 배경 장식
+         
         self.draw_decorations(screen)
         
-        # 2. 헤더와 네비게이션 버튼
+         
         self.draw_header(screen)
         for btn in self.nav_buttons:
             btn.draw(screen)
             
-        # 3. 중앙 텍스트
+         
         msg = "SELECT A MENU TO START THE RESONANCE"
         msg_surf = self.font_main.render(msg, True, (150, 150, 150))
         screen.blit(msg_surf, (self.app.WIDTH//2 - msg_surf.get_width()//2, self.app.HEIGHT//2))

@@ -136,7 +136,7 @@ class InGameChatScreen(BaseScreen):
         pygame.draw.rect(screen, self.colors["chat_bg"], self.chat_rect, border_radius=int(12*s))
         pygame.draw.rect(screen, theme_color, self.chat_rect, 2, border_radius=int(12*s))
 
-        # 3. 메시지 렌더링 (박스 안으로 제한)
+         
         line_height = int(28 * s)
         max_lines = (self.chat_rect.height - 30) // line_height
         y_pos = self.chat_rect.y + 15
