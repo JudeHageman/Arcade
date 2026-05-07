@@ -20,7 +20,7 @@ from settings import *
 class Tile(pygame.sprite.Sprite):
     """A single tile in the world map."""
 
-    def __init__(self, pos, groups, sprite_type, surface=pygame.Surface((TILESIZE, TILESIZE))):
+    def __init__(self, pos, groups, sprite_type, surface=None):
         """
         Initialize a tile.
 
@@ -33,7 +33,20 @@ class Tile(pygame.sprite.Sprite):
         """
         super().__init__(groups)
         self.sprite_type = sprite_type
-        self.image = surface
+        if surface is None:
+            if sprite_type in ("boundary", "invisible"):
+                # keep collision tiles invisible by default
+                self.image = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
+            elif sprite_type == "grass":
+                self.image = pygame.Surface((TILESIZE, TILESIZE))
+                self.image.fill((24, 72, 24))
+            elif sprite_type == "object":
+                self.image = pygame.Surface((TILESIZE, TILESIZE * 2))
+                self.image.fill((70, 70, 70))
+            else:
+                self.image = pygame.Surface((TILESIZE, TILESIZE), pygame.SRCALPHA)
+        else:
+            self.image = surface
 
         # Objects are tall (2 tiles) — offset them upward so their base
         # sits on the correct tile.

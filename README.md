@@ -1,2 +1,28 @@
 # Resonance
-This will be an arcade where players can login and play different games with some competitive scoring. Are arcade is unique in that there is a faction feature where players join a set amount of factions. There are two leaderboards, a faction ranking leaderboard and an individual leaderboard. The faction ranking leaderboard is based on how well factions complete a specific amount of challenges and the individual leaderboard is based on how well an individual scores across the games. Additionally, the factions get unique colors in each game for their character. There is also a faction chat which is in the python client, different from the live chat in each game.
+This is an arcade where players can login, play different games, chat through a unique chat per game, and compete on leaderboards. Are arcade is unique in that all players belong to one of three teams. In supported games, the player's avatar matches the color of their team and they earn team score through some mechanic in the game. Teams can then compete on who has the most cumulative team score across the games in the leaderboards.
+
+## How to setup
+Clone the repository:
+```
+git clone https://github.com/JudeHageman/Arcade.git
+```
+
+WebSockets may have to be installed, in which case run:
+```
+pip install websockets
+```
+
+Launch the Python client: 
+```
+python3 .\py_client\client.py
+```
+
+Open another terminal and launch the Python server:
+```
+python3 .\py_client\client.py
+```
+
+Open an additional terminal and launch a C++ game server:
+```
+cd ./cpp_server/ && ./server_text --port 8080
+```

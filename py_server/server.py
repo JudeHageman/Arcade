@@ -161,18 +161,18 @@ def _load_chats():
                         continue
                     try:
                         entry = json.loads(line)
-                        game_name = entry.get("game")
-                        if not game_name:
-                            continue
-                        bucket = collected.setdefault(game_name, [])
-                        if len(bucket) < LIMIT:
-                            bucket.append({
-                                "sender": entry.get("sender", ""),
-                                "message": entry.get("message", ""),
-                                "timestamp": entry.get("timestamp", "")
-                            })
                     except Exception:
                         continue
+                    game_name = entry.get("game")
+                    if not game_name:
+                        continue
+                    bucket = collected.setdefault(game_name, [])
+                    if len(bucket) < LIMIT:
+                        bucket.append({
+                            "sender": entry.get("sender", ""),
+                            "message": entry.get("message", ""),
+                            "timestamp": entry.get("timestamp", "")
+                        })
 
                 # stop once every known game has reached the limit
                 if known_games and all(
@@ -231,18 +231,18 @@ def _load_team_chats():
                         continue
                     try:
                         entry = json.loads(line)
-                        team_name = entry.get("team")
-                        if not team_name:
-                            continue
-                        bucket = collected.setdefault(team_name, [])
-                        if len(bucket) < LIMIT:
-                            bucket.append({
-                                "sender": entry.get("sender", ""),
-                                "message": entry.get("message", ""),
-                                "timestamp": entry.get("timestamp", "")
-                            })
                     except Exception:
                         continue
+                    team_name = entry.get("team")
+                    if not team_name:
+                        continue
+                    bucket = collected.setdefault(team_name, [])
+                    if len(bucket) < LIMIT:
+                        bucket.append({
+                            "sender": entry.get("sender", ""),
+                            "message": entry.get("message", ""),
+                            "timestamp": entry.get("timestamp", "")
+                        })
 
     except Exception:
         pass

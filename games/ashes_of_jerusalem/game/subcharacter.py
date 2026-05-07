@@ -14,10 +14,7 @@ class Assassin(Character):
     """
     def __init__(self, pos, groups, obstacle_sprites, player_id=None, is_local=True):
         super().__init__(pos, groups, obstacle_sprites, player_id, is_local)
-        
-        self.image = pygame.image.load('../../graphics/characters/assassin/down/assassin_south.png').convert_alpha()
-        self.rect = self.image.get_rect(topleft=pos)
-        self.hitbox = self.rect.inflate(0, -26)
+        self.character_name = "assassin"
         
         # Stats
         self.hp = 650
@@ -28,6 +25,10 @@ class Assassin(Character):
         self.first_attack = True
 
         self.import_player_assets()
+        if self.animations and 'down' in self.animations and self.animations['down']:
+            self.image = self.animations['down'][0]
+            self.rect = self.image.get_rect(topleft=pos)
+            self.hitbox = self.rect.inflate(0, -26)
 
     
     def special_ability(self):
@@ -60,11 +61,7 @@ class Knight(Character):
     """
     def __init__(self, pos, groups, obstacle_sprites, player_id=None, is_local=True):
         super().__init__(pos, groups, obstacle_sprites, player_id, is_local)
-        
-        # TODO: Set character image
-        self.image = pygame.image.load('../../graphics/characters/knight/down/knight_south.png').convert_alpha()
-        self.rect = self.image.get_rect(topleft=pos)
-        self.hitbox = self.rect.inflate(0, -26)
+        self.character_name = "knight"
         
         # TODO: Set stats
         self.hp = 750
@@ -74,6 +71,10 @@ class Knight(Character):
         self.speed = 40
 
         self.import_player_assets()
+        if self.animations and 'down' in self.animations and self.animations['down']:
+            self.image = self.animations['down'][0]
+            self.rect = self.image.get_rect(topleft=pos)
+            self.hitbox = self.rect.inflate(0, -26)
 
     def special_ability(self):
         """Implements The Characters Special Ability"""
@@ -105,11 +106,7 @@ class Hospitaller(Character):
     """
     def __init__(self, pos, groups, obstacle_sprites, player_id=None, is_local=True):
         super().__init__(pos, groups, obstacle_sprites, player_id, is_local)
-        
-        # TODO: Set character image
-        self.image = pygame.image.load('../../graphics/characters/hospitaller/down/hospitaller_south.png').convert_alpha()
-        self.rect = self.image.get_rect(topleft=pos)
-        self.hitbox = self.rect.inflate(0, -26)
+        self.character_name = "hospitaller"
         
         # TODO: Set stats
         self.hp = 850
@@ -119,6 +116,10 @@ class Hospitaller(Character):
         self.speed = 40
 
         self.import_player_assets()
+        if self.animations and 'down' in self.animations and self.animations['down']:
+            self.image = self.animations['down'][0]
+            self.rect = self.image.get_rect(topleft=pos)
+            self.hitbox = self.rect.inflate(0, -26)
 
     
     
@@ -143,11 +144,7 @@ class Paladin(Character):
     """
     def __init__(self, pos, groups, obstacle_sprites, player_id=None, is_local=True):
         super().__init__(pos, groups, obstacle_sprites, player_id, is_local)
-        
-        # TODO: Set character image
-        self.image = pygame.image.load('../../graphics/characters/paladin/down/paladin_south.png').convert_alpha()
-        self.rect = self.image.get_rect(topleft=pos)
-        self.hitbox = self.rect.inflate(0, -26)
+        self.character_name = "paladin"
         
         # TODO: Set stats
         self.hp = 800
@@ -157,6 +154,10 @@ class Paladin(Character):
         self.speed = 25
 
         self.import_player_assets()
+        if self.animations and 'down' in self.animations and self.animations['down']:
+            self.image = self.animations['down'][0]
+            self.rect = self.image.get_rect(topleft=pos)
+            self.hitbox = self.rect.inflate(0, -26)
     
     def special_ability(self):
         # TODO: Implement special ability
@@ -183,6 +184,6 @@ def get_all_character_classes():
     """Auto-discover all character classes"""
     character_classes = []
     for cls in Character.__subclasses__():
-        if cls.__name__ != 'Character' and cls.__name__.startswith('Character'):
+        if cls.__name__ != 'Character':
             character_classes.append(cls)
     return character_classes

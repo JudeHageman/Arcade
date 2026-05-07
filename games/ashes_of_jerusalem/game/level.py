@@ -171,6 +171,7 @@ class Level:
             [self.visible_sprites, self.obstacle_sprites]),
         ]
         floor_blocks_loaded = False
+        visual_tiles_loaded = False
         for csv_path, sprite_type, groups in LAYERS:
             try:
                 layer = load_layer(csv_path)
@@ -182,31 +183,34 @@ class Level:
                     x = col * TILESIZE
                     y = row * TILESIZE
                     surf = gid_map.get(tile_id)
-                if surf is not None:
-                    Tile((x, y), groups, sprite_type, surf)
-                else:
-                    Tile((x, y), groups, sprite_type)
+                    if surf is not None:
+                        Tile((x, y), groups, sprite_type, surf)
+                    else:
+                        Tile((x, y), groups, sprite_type)
+                    if sprite_type != "boundary":
+                        visual_tiles_loaded = True
                 if sprite_type == 'boundary':
                     floor_blocks_loaded = True
             except Exception as e:
                 print(f"[Map] {csv_path} failed: {e}")
         # --- WORLD_MAP fallback for boundaries (and always for player spawn) ---
         for row_index, row in enumerate(WORLD_MAP):
-                for col_index, col in enumerate(row):
-                    x = col_index * TILESIZE
-                    y = row_index * TILESIZE
-                    if col == 'x' and not floor_blocks_loaded:
-                        Tile((x, y), [self.visible_sprites, self.obstacle_sprites],
-                        'boundary')
-                    if col == 'p':
-                        self.player = self.character_class(
+            for col_index, col in enumerate(row):
+                x = col_index * TILESIZE
+                y = row_index * TILESIZE
+                if not visual_tiles_loaded:
+                    Tile((x, y), [self.visible_sprites], "grass")
+                if col == 'x' and not floor_blocks_loaded:
+                    Tile((x, y), [self.visible_sprites, self.obstacle_sprites], 'boundary')
+                if col == 'p':
+                    self.player = self.character_class(
                         (x, y),
                         [self.visible_sprites],
                         self.obstacle_sprites,
                         is_local=True
-                        )
-                        self.player.create_attack_callback = self.create_attack
-                        self.player.destroy_attack_callback = self.destroy_attack
+                    )
+                    self.player.create_attack_callback = self.create_attack
+                    self.player.destroy_attack_callback = self.destroy_attack
 
     def add_starting_items(self):
         """Add items defined in item.py's create_example_items() to the player's

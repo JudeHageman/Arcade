@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "data_structures"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "algorithms" / "sorting"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "algorithms"))
 
 # custom hash table for game catalog data
 from hash_table import HashTable
@@ -29,12 +29,13 @@ for session in memory.sessions:
     try:
         stats = _stats.get(game)
     except KeyError:
-        stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": ""}
+        stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": "", "total_team_score": 0}
         _stats.put(game, stats)
 
     stats["total_sessions"] += 1
     stats["_total_score"] += session.get("individual_score", 0)
     stats["avg_score"] = round(stats["_total_score"] / stats["total_sessions"], 2)
+    stats["total_team_score"] += session.get("team_score", 0)
 
     timestamp = session.get("timestamp", "")
     if timestamp > stats["last_played"]:
@@ -56,16 +57,16 @@ def get_all_games():
         for name, info in _games.table[i]:
             try:
                 stats = _stats.get(name)
-                stats_dict = {"total_sessions": stats["total_sessions"], "avg_score": stats["avg_score"], "last_played": stats["last_played"]}
+                stats_dict = {"total_sessions": stats["total_sessions"], "avg_score": stats["avg_score"], "last_played": stats["last_played"], "total_team_score": stats["total_team_score"]}
             except KeyError:
-                stats_dict = {"total_sessions": 0, "avg_score": 0.0, "last_played": ""}
+                stats_dict = {"total_sessions": 0, "avg_score": 0.0, "last_played": "", "total_team_score": 0}
             result.append({"name": name, **info, **stats_dict})
     return result
 
 def get_all_games_sorted(sort_by="most_played"):
     """Return all games ordered by the requested aggregate metric using heap sort."""
 
-    key_map = {"most_played": "total_sessions", "highest_avg_score": "avg_score", "most_recently_active": "last_played"}
+    key_map = {"most_played": "total_sessions", "highest_avg_score": "avg_score", "most_recently_active": "last_played", "team_score": "total_team_score"}
     key_name = key_map.get(sort_by, "total_sessions")
     return heap_sort(get_all_games(), key=lambda g: g.get(key_name, 0), reverse=True)
 
@@ -82,12 +83,13 @@ def refresh():
         try:
             stats = _stats.get(game)
         except KeyError:
-            stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": ""}
+            stats = {"total_sessions": 0, "_total_score": 0, "avg_score": 0.0, "last_played": "", "total_team_score": 0}
             _stats.put(game, stats)
 
         stats["total_sessions"] += 1
         stats["_total_score"] += session.get("individual_score", 0)
         stats["avg_score"] = round(stats["_total_score"] / stats["total_sessions"], 2)
+        stats["total_team_score"] += session.get("team_score", 0)
 
         timestamp = session.get("timestamp", "")
         if timestamp > stats["last_played"]:

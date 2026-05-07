@@ -22,6 +22,7 @@ def _new_profile(team):
     profile.put("team", team)
     profile.put("total_games", 0)
     profile.put("total_score", 0)
+    profile.put("total_team_score", 0)
     profile.put("best_score", 0)
     profile.put("total_time", 0)
     profile.put("score_history", ArrayList())
@@ -46,16 +47,26 @@ for session in memory.sessions:
         _profiles.put(username, profile)
 
     score = session.get("individual_score", 0)
+    team_score = session.get("team_score", 0)
+    game_time = session.get("game_time", 0)
     game = session.get("game", "")
 
     profile.put("total_games", profile.get("total_games") + 1)
     profile.put("total_score", profile.get("total_score") + score)
-    profile.put("total_time", profile.get("total_time") + session.get("game_time", 0))
+    profile.put("total_team_score", profile.get("total_team_score") + team_score)
+    profile.put("total_time", profile.get("total_time") + game_time)
     if score > profile.get("best_score"):
         profile.put("best_score", score)
 
     score_history = profile.get("score_history")
-    score_history.insert(0, {"game": game, "score": score, "timestamp": session.get("timestamp", "")})
+    score_history.insert(0, {
+        "game": game,
+        "score": score,
+        "individual_score": score,
+        "team_score": team_score,
+        "game_time": game_time,
+        "timestamp": session.get("timestamp", "")
+    })
     if len(score_history) > 50:
         score_history.pop()
 
@@ -72,6 +83,9 @@ def get_profile(username):
         score_history.append({
             "game": entry.get("game"),
             "score": entry.get("score"),
+            "individual_score": entry.get("individual_score", entry.get("score", 0)),
+            "team_score": entry.get("team_score", 0),
+            "game_time": entry.get("game_time", 0),
             "timestamp": entry.get("timestamp"),
         })
 
@@ -79,6 +93,7 @@ def get_profile(username):
         "team": profile.get("team"),
         "total_games": profile.get("total_games"),
         "total_score": profile.get("total_score"),
+        "total_team_score": profile.get("total_team_score"),
         "best_score": profile.get("best_score"),
         "total_time": profile.get("total_time"),
         "score_history": score_history,
@@ -104,16 +119,26 @@ def refresh():
             _profiles.put(username, profile)
 
         score = session.get("individual_score", 0)
+        team_score = session.get("team_score", 0)
+        game_time = session.get("game_time", 0)
         game = session.get("game", "")
 
         profile.put("total_games", profile.get("total_games") + 1)
         profile.put("total_score", profile.get("total_score") + score)
-        profile.put("total_time", profile.get("total_time") + session.get("game_time", 0))
+        profile.put("total_team_score", profile.get("total_team_score") + team_score)
+        profile.put("total_time", profile.get("total_time") + game_time)
         if score > profile.get("best_score"):
             profile.put("best_score", score)
 
         score_history = profile.get("score_history")
-        score_history.insert(0, {"game": game, "score": score, "timestamp": session.get("timestamp", "")})
+        score_history.insert(0, {
+            "game": game,
+            "score": score,
+            "individual_score": score,
+            "team_score": team_score,
+            "game_time": game_time,
+            "timestamp": session.get("timestamp", "")
+        })
         if len(score_history) > 50:
             score_history.pop()
 
