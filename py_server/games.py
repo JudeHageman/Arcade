@@ -34,6 +34,7 @@ for session in memory.sessions:
 
     stats["total_sessions"] += 1
     stats["_total_score"] += session.get("individual_score", 0)
+    # store running totals so avg_score can be recomputed cheaply
     stats["avg_score"] = round(stats["_total_score"] / stats["total_sessions"], 2)
     stats["total_team_score"] += session.get("team_score", 0)
 
@@ -67,6 +68,7 @@ def get_all_games_sorted(sort_by="most_played"):
     """Return all games ordered by the requested aggregate metric using heap sort."""
 
     key_map = {"most_played": "total_sessions", "highest_avg_score": "avg_score", "most_recently_active": "last_played", "team_score": "total_team_score"}
+    # fall back to "most played" if the caller passes an unknown sort key
     key_name = key_map.get(sort_by, "total_sessions")
     return heap_sort(get_all_games(), key=lambda g: g.get(key_name, 0), reverse=True)
 

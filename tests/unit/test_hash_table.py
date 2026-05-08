@@ -12,7 +12,7 @@ def test_hash_table_creation():
     print("Testing HashTable creation...")
     
     ht = HashTable()
-    assert ht.capacity == 10, "Default capacity should be 10"
+    assert ht.capacity == 16, "Default capacity should be 16"
     assert ht.size == 0, "Initial size should be 0"
     
     ht2 = HashTable(capacity=20)

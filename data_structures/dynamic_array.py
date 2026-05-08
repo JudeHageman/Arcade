@@ -1,16 +1,3 @@
-"""
-!!!This is an updated file from Lab 4!!!
-
-dynamic_array.py - Dynamic Array Implementation
-
-Students implement a dynamic array (like Python's list) from scratch.
-This will be used throughout the course in place of built-in lists.
-
-Author: Jude Hageman
-Date: 2/11/2026
-Lab: Lab 3 - ArrayList and Inventory System
-"""
-
 class ArrayList:
     """
     Implement the methods discussed here: 

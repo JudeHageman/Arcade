@@ -29,6 +29,7 @@ def _read_from(filename, offset):
         with path.open("rb") as f:
             f.seek(offset)
             new_bytes = f.read()
+            # keep offsets in bytes so incremental reads are O(new_data)
             new_offset = offset + len(new_bytes)
         for line in new_bytes.decode("utf-8", errors="replace").splitlines():
             line = line.strip()
@@ -66,6 +67,7 @@ def refresh():
     global _pending_sessions, _pending_accounts, _pending_games
 
     _pending_sessions, _session_offset = _read_from("sessions.ndjson", _session_offset)
+    # preserve full history in-memory for modules that need aggregate views
     sessions.extend(_pending_sessions)
 
     new_account_entries, _account_offset = _read_from("accounts.ndjson", _account_offset)

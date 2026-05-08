@@ -139,7 +139,6 @@ def change_view(view):
             navigation_frame.pack_forget()
         if login_widget:
             login_widget.pack(pady=10)
-
         if username_entry:
             username_entry.config(state=tk.NORMAL)
         if password_entry:
@@ -573,6 +572,7 @@ def _restore_game_button(game_process, game_name):
     """Restore a game button after its process closes."""
     global game_instance, running_game_name
     game_process.wait()
+
     # only restore the button if the game_instance hasn't been manually set to none (by user closing)
     if game_instance is not None and game_instance.pid == game_process.pid:
         running_game_name = None
@@ -680,7 +680,6 @@ window.option_add("*Listbox.Background", "#1a1a1a")
 
 TEAM_COLORS = {"pink": "#FFB6C1", "green": "#B4EEB4", "blue": "#ADD8E6", "default": "#555555"}
 
-# decorative background canvas (drawn behind all other widgets)
 _bg_canvas = tk.Canvas(window, highlightthickness=0)
 _bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -741,7 +740,7 @@ def _recolor_widget_tree(root_widget, fg):
             pass
         stack.extend(widget.winfo_children())
 
-# resonance title at the top centered
+# resonance title
 resonance_label = tk.Label(window, text="Resonance", font=("Arial", 22, "bold"), fg="white", bg="black")
 resonance_label.pack(pady=(12, 2))
 
@@ -771,7 +770,7 @@ team_label = tk.Label(window, text="Team: N/A", font=("Arial", 9))
 team_label.pack(pady=0)
 
 # team selection (shown only for new accounts, hidden by default)
-_team_btn_map = {}  # maps button widget -> its team color, so _recolor preserves them
+_team_btn_map = {}
 team_widget = tk.Frame(window)
 tk.Label(team_widget, text="Choose your team:", font=("Arial", 9)).pack(pady=(4, 2))
 team_btn_frame = tk.Frame(team_widget)
@@ -827,12 +826,15 @@ _games_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 _games_canvas_win = _games_canvas.create_window((0, 0), window=games_inner, anchor="nw")
 
 def _on_games_inner_resize(event):
+    """Handle the inner frame resize event."""
     _games_canvas.configure(scrollregion=_games_canvas.bbox("all"))
 
 def _on_games_canvas_resize(event):
+    """Handle the canvas resize event."""
     _games_canvas.itemconfig(_games_canvas_win, width=event.width)
 
 def _on_games_mousewheel(event):
+    """Handle the mouse wheel event."""
     _games_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
 games_inner.bind("<Configure>", _on_games_inner_resize)

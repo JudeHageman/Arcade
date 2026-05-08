@@ -57,6 +57,7 @@ def get_match_history(username, game=None, date_from=None, date_to=None, outcome
         node = node.next
 
     filtered = ArrayList()
+    # walk newest-to-oldest so consumers get recent matches first
     index = len(sessions) - 1
     while index >= 0:
         entry = sessions[index]
@@ -76,6 +77,7 @@ def get_match_history(username, game=None, date_from=None, date_to=None, outcome
         index -= 1
 
     output = []
+    # return plain objects so callers can send results directly as JSON
     for entry in filtered:
         output.append({
             "game": entry.get("game"),

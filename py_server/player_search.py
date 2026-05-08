@@ -34,6 +34,7 @@ def search_players(prefix):
     results = ArrayList()
     stack_nodes = ArrayList()
     stack_names = ArrayList()
+    # iterative DFS avoids recursion depth issues for large tries
     stack_nodes.append(_trie._find_node(prefix))
     stack_names.append(prefix)
 
@@ -57,6 +58,7 @@ def search_players(prefix):
             stack_names.append(current + char)
 
     output = []
+    # convert internal HashTable rows to plain JSON-friendly objects
     for entry in results:
         output.append({"username": entry.get("username"), "team": entry.get("team")})
     return output

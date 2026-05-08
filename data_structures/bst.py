@@ -1,11 +1,3 @@
-"""
-Binary Search Tree (BST) implementation in Python.
-Author: Jude Hageman
-Date: 4/22/2026
-
-This file contains the implementation of a binary search tree (BST) data structure.
-"""
-
 class Node:
     def __init__(self, value):
         self.value = value

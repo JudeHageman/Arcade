@@ -1,10 +1,3 @@
-"""
-HashTable implementation in Python.
-Author: Jude Hageman
-Date: 4/24/2026
-
-This file contains the implementation of a the hashtable data structure.
-"""
 from dynamic_array import ArrayList
 
 class HashTable:

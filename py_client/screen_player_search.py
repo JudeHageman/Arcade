@@ -3,6 +3,7 @@ import tkinter as tk
 
 # used to format player search results
 from screen_profile import render_profile_text
+from dynamic_array import ArrayList
 
 class PlayerSearchScreen:
     """Player search screen with list and detail panes."""
@@ -11,7 +12,7 @@ class PlayerSearchScreen:
         """Build player search controls and widgets."""
         # search controls and results list
         self.send_query = send_query
-        self.ps_results = []
+        self.ps_results = ArrayList()
         self.ps_has_searched = False
         self.widget = tk.Frame(parent)
 
@@ -47,7 +48,7 @@ class PlayerSearchScreen:
         prefix = self.ps_entry.get().strip()
 
         if not prefix:
-            self.ps_results = []
+            self.ps_results = ArrayList()
             self.show_message("No results found.")
             return
 
@@ -58,13 +59,21 @@ class PlayerSearchScreen:
         self.ps_detail_text.config(state=tk.DISABLED)
         self.send_query({"action": "query", "query": "player_search", "prefix": prefix})
 
+    def _set_results(self, results):
+        """Store incoming search rows in the screen's ArrayList state."""
+        self.ps_results = ArrayList()
+        if not results:
+            return
+        for row in results:
+            self.ps_results.append(row)
+
     def display_search_results(self, results):
         """Render player search result rows."""
         if not self.ps_has_searched:
             return
-        self.ps_results = results or []
+        self._set_results(results)
         self.ps_list.delete(0, tk.END)
-        if not self.ps_results:
+        if len(self.ps_results) == 0:
             self.show_message("No results found.")
             return
         for row in self.ps_results:

@@ -64,6 +64,21 @@ team_chats = HashTable()
 recent_team_chats = HashTable()
 accounts = HashTable()
 
+def _arraylist_to_list(array_list):
+    """Convert ArrayList to Python list for JSON serialization."""
+    output = []
+    for i in range(len(array_list)):
+        output.append(array_list[i])
+    return output
+
+def _hash_table_to_dict(table):
+    """Convert HashTable(key -> value) to a Python dict for JSON serialization."""
+    output = {}
+    for i in range(table.capacity):
+        for key, value in table.table[i]:
+            output[key] = value
+    return output
+
 async def _send_packet(target, packet):
     """Print and send a raw JSON packet with a leading newline."""
     if not isinstance(packet, str):
@@ -125,16 +140,16 @@ def _load_chats():
         return chats
 
     # resolve which games to collect for so we know when to stop early
-    known_games = set()
+    known_games = HashTable()
     for i in range(GAMES_LIBRARY.capacity):
         for game_name, _ in GAMES_LIBRARY.table[i]:
-            known_games.add(game_name)
+            known_games.put(game_name, True)
 
     LIMIT = 50
     CHUNK = 64 * 1024  # bytes per backwards read
 
     # collected[game] = list of entries, most-recent first
-    collected = {}
+    collected = HashTable()
 
     try:
         with chats_file.open("rb") as f:
@@ -166,7 +181,11 @@ def _load_chats():
                     game_name = entry.get("game")
                     if not game_name:
                         continue
-                    bucket = collected.setdefault(game_name, [])
+                    try:
+                        bucket = collected.get(game_name)
+                    except KeyError:
+                        bucket = ArrayList()
+                        collected.put(game_name, bucket)
                     if len(bucket) < LIMIT:
                         bucket.append({
                             "sender": entry.get("sender", ""),
@@ -175,21 +194,32 @@ def _load_chats():
                         })
 
                 # stop once every known game has reached the limit
-                if known_games and all(
-                    len(collected.get(g, [])) >= LIMIT for g in known_games
-                ):
-                    break
+                if known_games.size:
+                    all_satisfied = True
+                    for i in range(known_games.capacity):
+                        for g, _ in known_games.table[i]:
+                            try:
+                                has_limit = len(collected.get(g)) >= LIMIT
+                            except KeyError:
+                                has_limit = False
+                            if not has_limit:
+                                all_satisfied = False
+                                break
+                        if not all_satisfied:
+                            break
+                    if all_satisfied:
+                        break
 
     except Exception:
         pass
 
     # reverse back to chronological order and store in the HashTable
-    for game_name, messages in collected.items():
-        messages.reverse()
-        chat_list = ArrayList()
-        for msg in messages:
-            chat_list.append(msg)
-        chats.put(game_name, chat_list)
+    for i in range(collected.capacity):
+        for game_name, messages in collected.table[i]:
+            chat_list = ArrayList()
+            for j in range(len(messages) - 1, -1, -1):
+                chat_list.append(messages[j])
+            chats.put(game_name, chat_list)
 
     return chats
 
@@ -205,7 +235,7 @@ def _load_team_chats():
 
     LIMIT = 50
     CHUNK = 64 * 1024
-    collected = {}
+    collected = HashTable()
 
     try:
         with team_chats_file.open("rb") as f:
@@ -236,7 +266,11 @@ def _load_team_chats():
                     team_name = entry.get("team")
                     if not team_name:
                         continue
-                    bucket = collected.setdefault(team_name, [])
+                    try:
+                        bucket = collected.get(team_name)
+                    except KeyError:
+                        bucket = ArrayList()
+                        collected.put(team_name, bucket)
                     if len(bucket) < LIMIT:
                         bucket.append({
                             "sender": entry.get("sender", ""),
@@ -247,12 +281,12 @@ def _load_team_chats():
     except Exception:
         pass
 
-    for team_name, messages in collected.items():
-        messages.reverse()
-        chat_list = ArrayList()
-        for msg in messages:
-            chat_list.append(msg)
-        chats.put(team_name, chat_list)
+    for i in range(collected.capacity):
+        for team_name, messages in collected.table[i]:
+            chat_list = ArrayList()
+            for j in range(len(messages) - 1, -1, -1):
+                chat_list.append(messages[j])
+            chats.put(team_name, chat_list)
 
     return chats
 
@@ -328,19 +362,19 @@ async def send_status():
 
     while True:
         try:
-            games_status = {}
+            games_status = HashTable()
             for i in range(GAMES_LIBRARY.capacity):
                 for game_name, game_info in GAMES_LIBRARY.table[i]:
                     port = game_info["port"]
                     path = game_info["path"]
                     resonance = game_info.get("resonance", False)
                     connected = await check_game_server("127.0.0.1", port)
-                    games_status[game_name] = {
+                    games_status.put(game_name, {
                         "port": port,
                         "path": path,
                         "status": "connected" if connected else "disconnected",
                         "resonance": resonance
-                    }
+                    })
 
             authenticated_clients = 0
             for i in range(connected_clients.capacity):
@@ -351,7 +385,7 @@ async def send_status():
             message = json.dumps({
                 "type": "global",
                 "clients": authenticated_clients,
-                "games": games_status,
+                "games": _hash_table_to_dict(games_status),
                 "recent_chats": _chats_to_dict(recent_chats)
             })
 
@@ -362,6 +396,7 @@ async def send_status():
                         clients.append(client)
 
             if len(clients):
+                # fan out one prepared payload to every authenticated client
                 results = await asyncio.gather(
                     *(_send_packet(clients[j], message) for j in range(len(clients))),
                     return_exceptions=True
@@ -371,6 +406,7 @@ async def send_status():
                 for j in range(len(clients)):
                     if isinstance(results[j], Exception):
                         disconnected.append(clients[j])
+                # prune dead sockets after failed send attempts
                 for j in range(len(disconnected)):
                     try:
                         connected_clients.remove(disconnected[j])
@@ -389,9 +425,9 @@ async def send_status():
                         team = "default"
                     try:
                         recent = recent_team_chats.get(team)
-                        msgs = [recent[k] for k in range(len(recent))]
+                        msgs = _arraylist_to_list(recent)
                     except KeyError:
-                        msgs = []
+                        msgs = _arraylist_to_list(ArrayList())
                     if msgs:
                         try:
                             await _send_packet(client, {"type": "team_chat_update", "messages": msgs})
@@ -464,9 +500,9 @@ async def handle_client(client):
                         team = accounts.get(username).get("team", "default")
                         try:
                             tc = team_chats.get(team)
-                            tc_history = [tc[k] for k in range(len(tc))]
+                            tc_history = _arraylist_to_list(tc)
                         except KeyError:
-                            tc_history = []
+                            tc_history = _arraylist_to_list(ArrayList())
                         initial_payload = {
                             "type": "initial",
                             "username": username,
@@ -497,9 +533,9 @@ async def handle_client(client):
                             client_state["pending_hash"] = None
                             try:
                                 tc = team_chats.get(team)
-                                tc_history = [tc[k] for k in range(len(tc))]
+                                tc_history = _arraylist_to_list(tc)
                             except KeyError:
-                                tc_history = []
+                                tc_history = _arraylist_to_list(ArrayList())
                             initial_payload = {
                                 "type": "initial",
                                 "username": pending_username,
@@ -544,7 +580,7 @@ async def handle_client(client):
 
                     elif query_type == "player_search":
                         prefix = data.get("prefix", "")
-                        results = player_search_module.search_players(prefix) if prefix else []
+                        results = player_search_module.search_players(prefix) if prefix else _arraylist_to_list(ArrayList())
                         await _send_packet(client, {"type": "player_search", "results": results})
 
                     elif query_type == "player_profile":
